@@ -1,0 +1,4 @@
+*.o
+*.swp
+json-c/install
+json-c/build
