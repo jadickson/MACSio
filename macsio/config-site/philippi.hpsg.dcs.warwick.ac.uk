@@ -1,0 +1,7 @@
+HDF5_HOME=/home/jd/bin/hdf5/current
+
+CXX=mpicxx
+CC=mpicc
+CFLAGS=-DHAVE_MPI -g
+LINK=$(CXX)
+DOXCMD=doxygen
