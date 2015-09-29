@@ -146,7 +146,7 @@ clean:
 
 # should use plugin's extensions from their individual .make files here
 dataclean:
-	rm -f *.silo *.h5 *.exoII *.log
+	rm -f *.silo *.h5 *.exoII *.log *.dat
 	ls *.json | grep -v macsio_json_object.json | xargs rm -f
 
 allclean: clean dataclean doxclean

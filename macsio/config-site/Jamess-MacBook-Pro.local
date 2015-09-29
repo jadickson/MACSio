@@ -1,0 +1,8 @@
+HDF5_HOME=/usr/local/Cellar/hdf5/1.8.15
+TYPHONIO_HOME=/Users/James/Development/typhonio/build/gcc
+
+CXX=mpicxx
+CC=mpicc
+CFLAGS=-DHAVE_MPI -g
+LINK=$(CXX)
+DOXCMD=doxygen
