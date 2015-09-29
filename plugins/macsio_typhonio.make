@@ -67,6 +67,8 @@ PLUGIN_LIST += typhonio
 
 endif
 
+CFLAGS += -w
+
 macsio_typhonio.o: ../plugins/macsio_typhonio.c
 	$(CXX) -c $(TYPHONIO_CFLAGS) $(MACSIO_CFLAGS) $(CFLAGS) ../plugins/macsio_typhonio.c
 
