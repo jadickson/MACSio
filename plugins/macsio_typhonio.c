@@ -9,8 +9,9 @@
 #include <mpi.h>
 #endif
 
-#include <typhonio.h>
 #include <hdf5.h>
+#include <typhonio.h>
+
 
 /* Disable debugging messages */
 
@@ -81,13 +82,19 @@ This implments the MACSIO_MIF_CreateFile callback needed for a MIF mode plugin.
     void *userData         /**< [in] Optional plugin-specific user-defined data */
    	)
    {
+    TIO_File_t *retval = 0;
    	TIO_File_t file_id;
    	char *date = getDate();
    	TIO_Call( TIO_Create(fname, &file_id, TIO_ACC_REPLACE, "MACSio", 
    		"0.9", date, fname, MACSIO_MAIN_Comm, MPI_INFO_NULL, MACSIO_MAIN_Rank),
    	"File Creation Failed\n");
+    if (file_id >= 0)
+    {
+        retval = (TIO_File_t *) malloc(sizeof(TIO_File_t));
+        *retval = file_id;
+    }
 
-   	return (void *) file_id;
+   	return (void *) retval;
    }
 
    static void *OpenTyphonIOFile(
@@ -97,13 +104,19 @@ This implments the MACSIO_MIF_CreateFile callback needed for a MIF mode plugin.
    	void *userData
    	)
    {
+    TIO_File_t *retval = 0;
    	TIO_File_t file_id;
 
    	char *date = getDate();
    	TIO_Call( TIO_Open(fname, &file_id, TIO_ACC_READWRITE, "MACSio", 
    		"0.9", date, (char*)fname, MACSIO_MAIN_Comm, MPI_INFO_NULL, MACSIO_MAIN_Rank),
    	"File Open Failed\n");
-   	return (void *) file_id;
+    if (file_id >= 0)
+    {
+        retval = (TIO_File_t *) malloc(sizeof(TIO_File_t));
+        *retval = file_id;
+    }
+   	return (void *) retval;
    }
 
    static void CloseTyphonIOFile(
@@ -152,9 +165,9 @@ This implments the MACSIO_MIF_CreateFile callback needed for a MIF mode plugin.
 			TIO_Call( TIO_Write_Variable(file_id, var_id, TIO_DOUBLE, buf),
 				"Write variable failed\n");
 
-			TIO_Call( TIO_Close_Variable(file_id, variable_id),
+			TIO_Call( TIO_Close_Variable(file_id, var_id),
 				"Close variable failed\n");
-
+        }
 
    }
 
@@ -165,7 +178,7 @@ This implments the MACSIO_MIF_CreateFile callback needed for a MIF mode plugin.
    static void main_dump_mif(json_object *main_obj, int numFiles, int dumpn, double dumpt)
    {
 		int size, rank;
-		TIO_File_t *tioFile_ptr;
+		TIO_t *tioFile_ptr;
 		TIO_File_t tioFile;
 		TIO_Object_t tioGroup;
 		char fileName[256];
@@ -190,7 +203,7 @@ This implments the MACSIO_MIF_CreateFile callback needed for a MIF mode plugin.
 				dumpn,
 				json_object_path_get_string(main_obj, "clargs/fileext"));
 
-			tioFile_ptr = (TIO_File_t *) MACSIO_MIF_WaitForBaton(bat, fileName, 0);
+			tioFile_ptr = (TIO_t *) MACSIO_MIF_WaitForBaton(bat, fileName, 0);
 			tioFile = *tioFile_ptr;
 			tioGroup = userData.groupId;
 
@@ -224,163 +237,163 @@ This implments the MACSIO_MIF_CreateFile callback needed for a MIF mode plugin.
 
    static void main_dump_sif(json_object *main_obj, int dumpn, double dumpt)
    {
-#ifdef HAVE_MPI
- 	int ndims;
- 	int i, v, p;
- 	char const *mesh_type = json_object_path_get_string(main_obj, "clargs/part_type");
- 	char fileName[256];
- 	int use_part_count;
+// #ifdef HAVE_MPI
+//  	int ndims;
+//  	int i, v, p;
+//  	char const *mesh_type = json_object_path_get_string(main_obj, "clargs/part_type");
+//  	char fileName[256];
+//  	int use_part_count;
 
- 	hid_t h5file_id;
- 	hid_t fapl_id = make_fapl();
- 	hid_t dxpl_id = H5Pcreate(H5P_DATASET_XFER);
- 	hid_t dcpl_id = H5Pcreate(H5P_DATASET_CREATE);
- 	hid_t null_space_id = H5Screate(H5S_NULL);
- 	hid_t fspace_nodal_id, fspace_zonal_id;
- 	hsize_t global_log_dims_nodal[3];
- 	hsize_t global_log_dims_zonal[3];
+//  	hid_t h5file_id;
+//  	hid_t fapl_id = make_fapl();
+//  	hid_t dxpl_id = H5Pcreate(H5P_DATASET_XFER);
+//  	hid_t dcpl_id = H5Pcreate(H5P_DATASET_CREATE);
+//  	hid_t null_space_id = H5Screate(H5S_NULL);
+//  	hid_t fspace_nodal_id, fspace_zonal_id;
+//  	hsize_t global_log_dims_nodal[3];
+//  	hsize_t global_log_dims_zonal[3];
 
- 	MPI_Info mpiInfo = MPI_INFO_NULL;
+//  	MPI_Info mpiInfo = MPI_INFO_NULL;
 
-#warning WE ARE DOING SIF SLIGHTLY WRONG, DUPLICATING SHARED NODES
-#warning INCLUDE ARGS FOR ISTORE AND K_SYM
-#warning INCLUDE ARG PROCESS FOR HINTS
-#warning FAPL PROPS: ALIGNMENT 
+// #warning WE ARE DOING SIF SLIGHTLY WRONG, DUPLICATING SHARED NODES
+// #warning INCLUDE ARGS FOR ISTORE AND K_SYM
+// #warning INCLUDE ARG PROCESS FOR HINTS
+// #warning FAPL PROPS: ALIGNMENT 
 
-#warning FOR MIF, NEED A FILEROOT ARGUMENT OR CHANGE TO FILEFMT ARGUMENT
-    /* Construct name for the HDF5 file */
- 	sprintf(fileName, "%s_typhonio_%03d.%s",
- 		json_object_path_get_string(main_obj, "clargs/filebase"),
- 		dumpn,
- 		json_object_path_get_string(main_obj, "clargs/fileext"));
+// #warning FOR MIF, NEED A FILEROOT ARGUMENT OR CHANGE TO FILEFMT ARGUMENT
+//     /* Construct name for the HDF5 file */
+//  	sprintf(fileName, "%s_typhonio_%03d.%s",
+//  		json_object_path_get_string(main_obj, "clargs/filebase"),
+//  		dumpn,
+//  		json_object_path_get_string(main_obj, "clargs/fileext"));
 
- 	h5file_id = H5Fcreate(fileName, H5F_ACC_TRUNC, H5P_DEFAULT, fapl_id);
+//  	h5file_id = H5Fcreate(fileName, H5F_ACC_TRUNC, H5P_DEFAULT, fapl_id);
 
-    /* Create an HDF5 Dataspace for the global whole of mesh and var objects in the file. */
- 	ndims = json_object_path_get_int(main_obj, "clargs/part_dim");
- 	json_object *global_log_dims_array =
- 	json_object_path_get_array(main_obj, "problem/global/LogDims");
- 	json_object *global_parts_log_dims_array =
- 	json_object_path_get_array(main_obj, "problem/global/PartsLogDims");
-    /* Note that global zonal array is smaller in each dimension by one *ON*EACH*BLOCK*
-       in the associated dimension. */
- 	for (i = 0; i < ndims; i++)
- 	{
- 		int parts_log_dims_val = JsonGetInt(global_parts_log_dims_array, "", i);
- 		global_log_dims_nodal[ndims-1-i] = (hsize_t) JsonGetInt(global_log_dims_array, "", i);
- 		global_log_dims_zonal[ndims-1-i] = global_log_dims_nodal[ndims-1-i] -
- 		JsonGetInt(global_parts_log_dims_array, "", i);
- 	}
- 	fspace_nodal_id = H5Screate_simple(ndims, global_log_dims_nodal, 0);
- 	fspace_zonal_id = H5Screate_simple(ndims, global_log_dims_zonal, 0);
+//     /* Create an HDF5 Dataspace for the global whole of mesh and var objects in the file. */
+//  	ndims = json_object_path_get_int(main_obj, "clargs/part_dim");
+//  	json_object *global_log_dims_array =
+//  	json_object_path_get_array(main_obj, "problem/global/LogDims");
+//  	json_object *global_parts_log_dims_array =
+//  	json_object_path_get_array(main_obj, "problem/global/PartsLogDims");
+//     /* Note that global zonal array is smaller in each dimension by one *ON*EACH*BLOCK*
+//        in the associated dimension. */
+//  	for (i = 0; i < ndims; i++)
+//  	{
+//  		int parts_log_dims_val = JsonGetInt(global_parts_log_dims_array, "", i);
+//  		global_log_dims_nodal[ndims-1-i] = (hsize_t) JsonGetInt(global_log_dims_array, "", i);
+//  		global_log_dims_zonal[ndims-1-i] = global_log_dims_nodal[ndims-1-i] -
+//  		JsonGetInt(global_parts_log_dims_array, "", i);
+//  	}
+//  	fspace_nodal_id = H5Screate_simple(ndims, global_log_dims_nodal, 0);
+//  	fspace_zonal_id = H5Screate_simple(ndims, global_log_dims_zonal, 0);
 
-    /* Get the list of vars on the first part as a guide to loop over vars */
- 	json_object *part_array = json_object_path_get_array(main_obj, "problem/parts");
- 	json_object *first_part_obj = json_object_array_get_idx(part_array, 0);
- 	json_object *first_part_vars_array = json_object_path_get_array(first_part_obj, "Vars");
+//     /* Get the list of vars on the first part as a guide to loop over vars */
+//  	json_object *part_array = json_object_path_get_array(main_obj, "problem/parts");
+//  	json_object *first_part_obj = json_object_array_get_idx(part_array, 0);
+//  	json_object *first_part_vars_array = json_object_path_get_array(first_part_obj, "Vars");
 
-    /* Dataset transfer property list used in all H5Dwrite calls */
-#if H5_HAVE_PARALLEL
- 	if (no_collective)
- 		H5Pset_dxpl_mpio(dxpl_id, H5FD_MPIO_INDEPENDENT);
- 	else
- 		H5Pset_dxpl_mpio(dxpl_id, H5FD_MPIO_COLLECTIVE);
-#endif
+//     /* Dataset transfer property list used in all H5Dwrite calls */
+// #if H5_HAVE_PARALLEL
+//  	if (no_collective)
+//  		H5Pset_dxpl_mpio(dxpl_id, H5FD_MPIO_INDEPENDENT);
+//  	else
+//  		H5Pset_dxpl_mpio(dxpl_id, H5FD_MPIO_COLLECTIVE);
+// #endif
 
 
-    /* Loop over vars and then over parts */
-    /* currently assumes all vars exist on all ranks. but not all parts */
-    for (v = -1; v < json_object_array_length(first_part_vars_array); v++) /* -1 start is for Mesh */
- 	{
+//     /* Loop over vars and then over parts */
+//     /* currently assumes all vars exist on all ranks. but not all parts */
+//     for (v = -1; v < json_object_array_length(first_part_vars_array); v++) /* -1 start is for Mesh */
+//  	{
 
-#warning SKIPPING MESH
-        if (v == -1) continue; /* All ranks skip mesh (coords) for now */
+// #warning SKIPPING MESH
+//         if (v == -1) continue; /* All ranks skip mesh (coords) for now */
 
-        /* Inspect the first part's var object for name, datatype, etc. */
- 		json_object *var_obj = json_object_array_get_idx(first_part_vars_array, v);
- 		char const *varName = json_object_path_get_string(var_obj, "name");
- 		char *centering = strdup(json_object_path_get_string(var_obj, "centering"));
- 		json_object *dataobj = json_object_path_get_extarr(var_obj, "data");
-#warning JUST ASSUMING TWO TYPES NOW. CHANGE TO A FUNCTION
- 		hid_t dtype_id = json_object_extarr_type(dataobj)==json_extarr_type_flt64? 
- 		H5T_NATIVE_DOUBLE:H5T_NATIVE_INT;
- 		hid_t fspace_id = H5Scopy(strcmp(centering, "zone") ? fspace_nodal_id : fspace_zonal_id);
- 		hid_t dcpl_id = make_dcpl(compression_alg_str, compression_params_str, fspace_id, dtype_id);
+//         /* Inspect the first part's var object for name, datatype, etc. */
+//  		json_object *var_obj = json_object_array_get_idx(first_part_vars_array, v);
+//  		char const *varName = json_object_path_get_string(var_obj, "name");
+//  		char *centering = strdup(json_object_path_get_string(var_obj, "centering"));
+//  		json_object *dataobj = json_object_path_get_extarr(var_obj, "data");
+// #warning JUST ASSUMING TWO TYPES NOW. CHANGE TO A FUNCTION
+//  		hid_t dtype_id = json_object_extarr_type(dataobj)==json_extarr_type_flt64? 
+//  		H5T_NATIVE_DOUBLE:H5T_NATIVE_INT;
+//  		hid_t fspace_id = H5Scopy(strcmp(centering, "zone") ? fspace_nodal_id : fspace_zonal_id);
+//  		hid_t dcpl_id = make_dcpl(compression_alg_str, compression_params_str, fspace_id, dtype_id);
 
-        /* Create the file dataset (using old-style H5Dcreate API here) */
-#warning USING DEFAULT DCPL: LATER ADD COMPRESSION, ETC.
+//         /* Create the file dataset (using old-style H5Dcreate API here) */
+// #warning USING DEFAULT DCPL: LATER ADD COMPRESSION, ETC.
 
- 		hid_t ds_id = H5Dcreate1(h5file_id, varName, dtype_id, fspace_id, dcpl_id); 
- 		H5Sclose(fspace_id);
- 		H5Pclose(dcpl_id);
+//  		hid_t ds_id = H5Dcreate1(h5file_id, varName, dtype_id, fspace_id, dcpl_id); 
+//  		H5Sclose(fspace_id);
+//  		H5Pclose(dcpl_id);
 
-        /* Loop to make write calls for this var for each part on this rank */
-#warning USE NEW MULTI-DATASET API WHEN AVAILABLE TO AGLOMERATE ALL PARTS INTO ONE CALL
- 		use_part_count = (int) ceil(json_object_path_get_double(main_obj, "clargs/avg_num_parts"));
- 		for (p = 0; p < use_part_count; p++)
- 		{
- 			json_object *part_obj = json_object_array_get_idx(part_array, p);
- 			json_object *var_obj = 0;
- 			hid_t mspace_id = H5Scopy(null_space_id);
- 			void const *buf = 0;
+//         /* Loop to make write calls for this var for each part on this rank */
+// #warning USE NEW MULTI-DATASET API WHEN AVAILABLE TO AGLOMERATE ALL PARTS INTO ONE CALL
+//  		use_part_count = (int) ceil(json_object_path_get_double(main_obj, "clargs/avg_num_parts"));
+//  		for (p = 0; p < use_part_count; p++)
+//  		{
+//  			json_object *part_obj = json_object_array_get_idx(part_array, p);
+//  			json_object *var_obj = 0;
+//  			hid_t mspace_id = H5Scopy(null_space_id);
+//  			void const *buf = 0;
 
- 			fspace_id = H5Scopy(null_space_id);
+//  			fspace_id = H5Scopy(null_space_id);
 
-            /* this rank actually has something to contribute to the H5Dwrite call */
- 			if (part_obj)
- 			{
- 				int i;
- 				hsize_t starts[3], counts[3];
- 				json_object *vars_array = json_object_path_get_array(part_obj, "Vars");
- 				json_object *mesh_obj = json_object_path_get_object(part_obj, "Mesh");
- 				json_object *var_obj = json_object_array_get_idx(vars_array, v);
- 				json_object *extarr_obj = json_object_path_get_extarr(var_obj, "data");
- 				json_object *global_log_origin_array =
- 				json_object_path_get_array(part_obj, "GlobalLogOrigin");
- 				json_object *global_log_indices_array =
- 				json_object_path_get_array(part_obj, "GlobalLogIndices");
- 				json_object *mesh_dims_array = json_object_path_get_array(mesh_obj, "LogDims");
- 				for (i = 0; i < ndims; i++)
- 				{
- 					starts[ndims-1-i] =
- 					json_object_get_int(json_object_array_get_idx(global_log_origin_array,i));
- 					counts[ndims-1-i] =
- 					json_object_get_int(json_object_array_get_idx(mesh_dims_array,i));
- 					if (!strcmp(centering, "zone"))
- 					{
- 						counts[ndims-1-i]--;
- 						starts[ndims-1-i] -=
- 						json_object_get_int(json_object_array_get_idx(global_log_indices_array,i));
- 					}
- 				}
+//             /* this rank actually has something to contribute to the H5Dwrite call */
+//  			if (part_obj)
+//  			{
+//  				int i;
+//  				hsize_t starts[3], counts[3];
+//  				json_object *vars_array = json_object_path_get_array(part_obj, "Vars");
+//  				json_object *mesh_obj = json_object_path_get_object(part_obj, "Mesh");
+//  				json_object *var_obj = json_object_array_get_idx(vars_array, v);
+//  				json_object *extarr_obj = json_object_path_get_extarr(var_obj, "data");
+//  				json_object *global_log_origin_array =
+//  				json_object_path_get_array(part_obj, "GlobalLogOrigin");
+//  				json_object *global_log_indices_array =
+//  				json_object_path_get_array(part_obj, "GlobalLogIndices");
+//  				json_object *mesh_dims_array = json_object_path_get_array(mesh_obj, "LogDims");
+//  				for (i = 0; i < ndims; i++)
+//  				{
+//  					starts[ndims-1-i] =
+//  					json_object_get_int(json_object_array_get_idx(global_log_origin_array,i));
+//  					counts[ndims-1-i] =
+//  					json_object_get_int(json_object_array_get_idx(mesh_dims_array,i));
+//  					if (!strcmp(centering, "zone"))
+//  					{
+//  						counts[ndims-1-i]--;
+//  						starts[ndims-1-i] -=
+//  						json_object_get_int(json_object_array_get_idx(global_log_indices_array,i));
+//  					}
+//  				}
 
-                /* set selection of filespace */
- 				fspace_id = H5Dget_space(ds_id);
- 				H5Sselect_hyperslab(fspace_id, H5S_SELECT_SET, starts, 0, counts, 0);
+//                 /* set selection of filespace */
+//  				fspace_id = H5Dget_space(ds_id);
+//  				H5Sselect_hyperslab(fspace_id, H5S_SELECT_SET, starts, 0, counts, 0);
 
-                /* set dataspace of data in memory */
- 				mspace_id = H5Screate_simple(ndims, counts, 0);
- 				buf = json_object_extarr_data(extarr_obj);
- 			}
+//                 /* set dataspace of data in memory */
+//  				mspace_id = H5Screate_simple(ndims, counts, 0);
+//  				buf = json_object_extarr_data(extarr_obj);
+//  			}
 
- 			H5Dwrite(ds_id, dtype_id, mspace_id, fspace_id, dxpl_id, buf);
- 			H5Sclose(fspace_id);
- 			H5Sclose(mspace_id);
+//  			H5Dwrite(ds_id, dtype_id, mspace_id, fspace_id, dxpl_id, buf);
+//  			H5Sclose(fspace_id);
+//  			H5Sclose(mspace_id);
 
- 		}
+//  		}
 
- 		H5Dclose(ds_id);
- 		free(centering);
- 	}
+//  		H5Dclose(ds_id);
+//  		free(centering);
+//  	}
 
- 	H5Sclose(fspace_nodal_id);
- 	H5Sclose(fspace_zonal_id);
- 	H5Sclose(null_space_id);
- 	H5Pclose(dxpl_id);
- 	H5Pclose(fapl_id);
- 	H5Fclose(h5file_id);
+//  	H5Sclose(fspace_nodal_id);
+//  	H5Sclose(fspace_zonal_id);
+//  	H5Sclose(null_space_id);
+//  	H5Pclose(dxpl_id);
+//  	H5Pclose(fapl_id);
+//  	H5Fclose(h5file_id);
 
-#endif
+// #endif
    }
 
    static void main_dump(int argi, int argc, char **argv, json_object *main_obj,
