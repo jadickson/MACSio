@@ -63,7 +63,8 @@ Place, Suite 330, Boston, MA 02111-1307 USA
 
 #ifdef HAVE_ZFP
 /*!
-\addtogroup ZFP As HDF5 Compression Filter
+\addtogroup ZFP
+\brief HDF5 Compression Filter
 
 Copyright (c) 2014-2015, RWTH Aachen University, JARA - Juelich Aachen Research Alliance.
 Produced at the RWTH Aachen University, Germany.
