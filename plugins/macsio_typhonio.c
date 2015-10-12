@@ -84,11 +84,12 @@ static void *CreateTyphonIOFile(
     void *userData         /**< [in] Optional plugin-specific user-defined data */
     )
 {
+    printf("Rank %d: fname: %s, nsname: %s\n", MACSIO_MAIN_Rank, fname, nsname);
     TIO_File_t *retval = 0;
     TIO_File_t file_id;
     char *date = getDate();
     TIO_Call( TIO_Create(fname, &file_id, TIO_ACC_REPLACE, "MACSio", 
-       "0.9", date, fname, MACSIO_MAIN_Comm, MPI_INFO_NULL, MACSIO_MAIN_Rank),
+       "0.9", date, (char*)fname, MPI_COMM_SELF, MPI_INFO_NULL, MACSIO_MAIN_Rank),
     "File Creation Failed\n");
     if (file_id >= 0)
     {
@@ -111,7 +112,7 @@ static void *OpenTyphonIOFile(
 
     char *date = getDate();
     TIO_Call( TIO_Open(fname, &file_id, TIO_ACC_READWRITE, "MACSio", 
-       "0.9", date, (char*)fname, MACSIO_MAIN_Comm, MPI_INFO_NULL, MACSIO_MAIN_Rank),
+     "0.9", date, (char*)fname, MACSIO_MAIN_Comm, MPI_INFO_NULL, MACSIO_MAIN_Rank),
     "File Open Failed\n");
     if (file_id >= 0)
     {
@@ -127,7 +128,7 @@ static void CloseTyphonIOFile(
     )
 {
     TIO_Call( TIO_Close(*(TIO_File_t*)file), 
-       "File Close Failed\n");
+     "File Close Failed\n");
 }
 
 static void write_mesh_part(
@@ -141,34 +142,34 @@ static void write_mesh_part(
   json_object *vars_array = json_object_path_get_array(part_obj, "Vars");
 
   TIO_Call( TIO_Create_State(file_id, state_name, &state_id, 1, (TIO_Time_t)0.0, "us"),
-     "State Create Failed\n");
+   "State Create Failed\n");
 
   for (int i = 0; i < json_object_array_length(vars_array); i++)
   {
-     int j;
-     TIO_Size_t var_dims[3];
-     TIO_Object_t fspace_id, ds_id, var_id;
-     json_object *var_obj = json_object_array_get_idx(vars_array, i);
-     json_object *data_obj = json_object_path_get_extarr(var_obj, "data");
-     char const *varname = json_object_path_get_string(var_obj, "name");
-     int ndims = json_object_extarr_ndims(data_obj);
-     void const *buf = json_object_extarr_data(data_obj);
+   int j;
+   TIO_Size_t var_dims[3];
+   TIO_Object_t fspace_id, ds_id, var_id;
+   json_object *var_obj = json_object_array_get_idx(vars_array, i);
+   json_object *data_obj = json_object_path_get_extarr(var_obj, "data");
+   char const *varname = json_object_path_get_string(var_obj, "name");
+   int ndims = json_object_extarr_ndims(data_obj);
+   void const *buf = json_object_extarr_data(data_obj);
 
-     TIO_Dims_t ndims_tio = (TIO_Dims_t)ndims;
+   TIO_Dims_t ndims_tio = (TIO_Dims_t)ndims;
 
-     TIO_Data_t dtype_id = json_object_extarr_type(data_obj)==json_extarr_type_flt64? 
-     TIO_DOUBLE:TIO_INT;
+   TIO_Data_t dtype_id = json_object_extarr_type(data_obj)==json_extarr_type_flt64? 
+   TIO_DOUBLE:TIO_INT;
 
-     for (j = 0; j < ndims; j++)
-        var_dims[j] = json_object_extarr_dim(data_obj, j);
+   for (j = 0; j < ndims; j++)
+    var_dims[j] = json_object_extarr_dim(data_obj, j);
 
-    TIO_Call( TIO_Create_Variable(file_id, state_id, varname, &var_id, TIO_DOUBLE, ndims_tio, var_dims, NULL),
-        "Create variable failed\n");
-    TIO_Call( TIO_Write_Variable(file_id, var_id, TIO_DOUBLE, buf),
-        "Write variable failed\n");
+TIO_Call( TIO_Create_Variable(file_id, state_id, varname, &var_id, TIO_DOUBLE, ndims_tio, var_dims, NULL),
+    "Create variable failed\n");
+TIO_Call( TIO_Write_Variable(file_id, var_id, TIO_DOUBLE, buf),
+    "Write variable failed\n");
 
-    TIO_Call( TIO_Close_Variable(file_id, var_id),
-        "Close variable failed\n");
+TIO_Call( TIO_Close_Variable(file_id, var_id),
+    "Close variable failed\n");
 }
 
 }
@@ -177,8 +178,22 @@ typedef struct _user_data {
     TIO_t groupId;
 } user_data_t;
 
+static void debug()
+{
+
+    int i = 0;
+    char hostname[256];
+    gethostname(hostname, sizeof(hostname));
+    printf("PID %d on %s ready for attach\n", getpid(), hostname);
+    fflush(stdout);
+    while (0 == i)
+        sleep(5);
+}
+
 static void main_dump_mif(json_object *main_obj, int numFiles, int dumpn, double dumpt)
 {
+
+  //debug();
   int size, rank;
   TIO_t *tioFile_ptr;
   TIO_File_t tioFile;
@@ -188,44 +203,61 @@ static void main_dump_mif(json_object *main_obj, int numFiles, int dumpn, double
   int *theData;
   user_data_t userData;
   MACSIO_MIF_ioFlags_t ioFlags = {MACSIO_MIF_WRITE,
-     JsonGetInt(main_obj, "clargs/exercise_scr")&0x1};
+   JsonGetInt(main_obj, "clargs/exercise_scr")&0x1};
 
 #warning SET FILE AND DATASET PROPERTIES
 #warning DIFFERENT MPI TAGS FOR DIFFERENT PLUGINS AND CONTEXTS
-     MACSIO_MIF_baton_t *bat = MACSIO_MIF_Init(numFiles, ioFlags, MACSIO_MAIN_Comm, 3,
-        CreateTyphonIOFile, OpenTyphonIOFile, CloseTyphonIOFile, &userData);
+   MACSIO_MIF_baton_t *bat = MACSIO_MIF_Init(numFiles, ioFlags, MACSIO_MAIN_Comm, 3,
+    CreateTyphonIOFile, OpenTyphonIOFile, CloseTyphonIOFile, &userData);
 
-     rank = json_object_path_get_int(main_obj, "parallel/mpi_rank");
-     size = json_object_path_get_int(main_obj, "parallel/mpi_size");
+   rank = json_object_path_get_int(main_obj, "parallel/mpi_rank");
+   size = json_object_path_get_int(main_obj, "parallel/mpi_size");
 
     /* Construct name for the silo file */
-     sprintf(fileName, "%s_typhonio_%05d_%03d.%s",
-        json_object_path_get_string(main_obj, "clargs/filebase"),
-        MACSIO_MIF_RankOfGroup(bat, rank),
-        dumpn,
-        json_object_path_get_string(main_obj, "clargs/fileext"));
+   sprintf(fileName, "%s_typhonio_%05d_%03d.%s",
+    json_object_path_get_string(main_obj, "clargs/filebase"),
+    MACSIO_MIF_RankOfGroup(bat, rank),
+    dumpn,
+    json_object_path_get_string(main_obj, "clargs/fileext"));
 
-     tioFile_ptr = (TIO_t *) MACSIO_MIF_WaitForBaton(bat, fileName, 0);
-     tioFile = *tioFile_ptr;
-     tioGroup = userData.groupId;
+    // TIO_File_t *file;
+    // char name[10];
+    // sprintf(name, "file_%d", rank); 
+    // file = (TIO_File_t*)CreateTyphonIOFile(name, 0, NULL);
+    // CloseTyphonIOFile(file, NULL);
 
-     json_object *parts = json_object_path_get_array(main_obj, "problem/parts");
+    // return;
+   
+   // TIO_File_t file_id; 
+   // char *date = "Fri 09-10-2015 10:49";
+   // char *fname = "Test.dat";
 
-     for (int i = 0; i < json_object_array_length(parts); i++)
-     {
-        char domain_dir[256];
-        json_object *this_part = json_object_array_get_idx(parts, i);
-        TIO_t domain_group_id;
+   // TIO_Call( TIO_Create(fname, &file_id, TIO_ACC_REPLACE, "MACSio", 
+   //    "0.9", date, (char*)fname, MACSIO_MAIN_Comm, MPI_INFO_NULL, MACSIO_MAIN_Rank),
+   // "File Creation Failed\n");
 
-        snprintf(domain_dir, sizeof(domain_dir), "domain_%07d",
-           json_object_path_get_int(this_part, "Mesh/ChunkID"));
+   TIO_Set_Verbose(TIO_VERBOSE_ALL);
+   tioFile_ptr = (TIO_t *) MACSIO_MIF_WaitForBaton(bat, fileName, 0);
+   tioFile = *tioFile_ptr;
+   tioGroup = userData.groupId;
+
+   json_object *parts = json_object_path_get_array(main_obj, "problem/parts");
+
+   for (int i = 0; i < json_object_array_length(parts); i++)
+   {
+    char domain_dir[256];
+    json_object *this_part = json_object_array_get_idx(parts, i);
+    TIO_t domain_group_id;
+
+    snprintf(domain_dir, sizeof(domain_dir), "domain_%07d",
+     json_object_path_get_int(this_part, "Mesh/ChunkID"));
 
 				//domain_group_id = H5Gcreate1(h5File, domain_dir, 0);
 
-        write_mesh_part(tioFile, this_part);
+    write_mesh_part(tioFile, this_part);
 
 				//H5Gclose(domain_group_id);
-    }
+}
 
     /* Hand off the baton to the next processor. This winds up closing
      * the file so that the next processor that opens it can be assured
@@ -262,9 +294,9 @@ static void main_dump_mif(json_object *main_obj, int numFiles, int dumpn, double
 #warning FOR MIF, NEED A FILEROOT ARGUMENT OR CHANGE TO FILEFMT ARGUMENT
     /* Construct name for the HDF5 file */
     sprintf(fileName, "%s_typhonio_%03d.%s",
-       json_object_path_get_string(main_obj, "clargs/filebase"),
-       dumpn,
-       json_object_path_get_string(main_obj, "clargs/fileext"));
+     json_object_path_get_string(main_obj, "clargs/filebase"),
+     dumpn,
+     json_object_path_get_string(main_obj, "clargs/fileext"));
 
     char *date = getDate();
     TIO_Call( TIO_Create(fileName, &tiofile_id, TIO_ACC_REPLACE, "MACSio", 
@@ -284,19 +316,19 @@ static void main_dump_mif(json_object *main_obj, int numFiles, int dumpn, double
        in the associated dimension. */
     for (i = 0; i < ndims; i++)
     {
-     int parts_log_dims_val = JsonGetInt(global_parts_log_dims_array, "", i);
-     global_log_dims_nodal[ndims-1-i] = (hsize_t) JsonGetInt(global_log_dims_array, "", i);
-     global_log_dims_zonal[ndims-1-i] = global_log_dims_nodal[ndims-1-i] -
-     JsonGetInt(global_parts_log_dims_array, "", i);
- }
+       int parts_log_dims_val = JsonGetInt(global_parts_log_dims_array, "", i);
+       global_log_dims_nodal[ndims-1-i] = (hsize_t) JsonGetInt(global_log_dims_array, "", i);
+       global_log_dims_zonal[ndims-1-i] = global_log_dims_nodal[ndims-1-i] -
+       JsonGetInt(global_parts_log_dims_array, "", i);
+   }
  	// fspace_nodal_id = H5Screate_simple(ndims, global_log_dims_nodal, 0);
  	// fspace_zonal_id = H5Screate_simple(ndims, global_log_dims_zonal, 0);
- 
+
 
     /* Get the list of vars on the first part as a guide to loop over vars */
-json_object *part_array = json_object_path_get_array(main_obj, "problem/parts");
-json_object *first_part_obj = json_object_array_get_idx(part_array, 0);
-json_object *first_part_vars_array = json_object_path_get_array(first_part_obj, "Vars");
+   json_object *part_array = json_object_path_get_array(main_obj, "problem/parts");
+   json_object *first_part_obj = json_object_array_get_idx(part_array, 0);
+   json_object *first_part_vars_array = json_object_path_get_array(first_part_obj, "Vars");
 
     /* Dataset transfer property list used in all H5Dwrite calls */
 // #if H5_HAVE_PARALLEL
@@ -310,78 +342,78 @@ json_object *first_part_vars_array = json_object_path_get_array(first_part_obj, 
     /* Loop over vars and then over parts */
     /* currently assumes all vars exist on all ranks. but not all parts */
     for (v = -1; v < json_object_array_length(first_part_vars_array); v++) /* -1 start is for Mesh */
-{
+   {
 
 #warning SKIPPING MESH
         if (v == -1) continue; /* All ranks skip mesh (coords) for now */
 
         /* Inspect the first part's var object for name, datatype, etc. */
- json_object *var_obj = json_object_array_get_idx(first_part_vars_array, v);
- char const *varName = json_object_path_get_string(var_obj, "name");
- char *centering = strdup(json_object_path_get_string(var_obj, "centering"));
- json_object *dataobj = json_object_path_get_extarr(var_obj, "data");
+       json_object *var_obj = json_object_array_get_idx(first_part_vars_array, v);
+       char const *varName = json_object_path_get_string(var_obj, "name");
+       char *centering = strdup(json_object_path_get_string(var_obj, "centering"));
+       json_object *dataobj = json_object_path_get_extarr(var_obj, "data");
 
- TIO_Data_t dtype_id = json_object_extarr_type(dataobj)==json_extarr_type_flt64? 
- TIO_DOUBLE:TIO_INT;
+       TIO_Data_t dtype_id = json_object_extarr_type(dataobj)==json_extarr_type_flt64? 
+       TIO_DOUBLE:TIO_INT;
 
- TIO_Size_t *global_log_dims = strcmp(centering, "zone") ? global_log_dims_nodal : global_log_dims_zonal;
- 
- TIO_Object_t ds_id;
- TIO_Dims_t ndims_tio = (TIO_Dims_t)ndims;
+       TIO_Size_t *global_log_dims = strcmp(centering, "zone") ? global_log_dims_nodal : global_log_dims_zonal;
 
- TIO_Call( TIO_Create_Variable(tiofile_id, state_id, varName, &ds_id, TIO_DOUBLE, ndims_tio, global_log_dims, NULL),
-    "Create Variable failed\n");
- TIO_Call( TIO_Close_Variable(tiofile_id, ds_id),
-    "Close Variable failed\n");
+       TIO_Object_t ds_id;
+       TIO_Dims_t ndims_tio = (TIO_Dims_t)ndims;
+
+       TIO_Call( TIO_Create_Variable(tiofile_id, state_id, varName, &ds_id, TIO_DOUBLE, ndims_tio, global_log_dims, NULL),
+        "Create Variable failed\n");
+       TIO_Call( TIO_Close_Variable(tiofile_id, ds_id),
+        "Close Variable failed\n");
 
         /* Loop to make write calls for this var for each part on this rank */
- use_part_count = (int) ceil(json_object_path_get_double(main_obj, "clargs/avg_num_parts"));
- for (p = 0; p < use_part_count; p++)
- {
-    json_object *part_obj = json_object_array_get_idx(part_array, p);
-    json_object *var_obj = 0;
+       use_part_count = (int) ceil(json_object_path_get_double(main_obj, "clargs/avg_num_parts"));
+       for (p = 0; p < use_part_count; p++)
+       {
+        json_object *part_obj = json_object_array_get_idx(part_array, p);
+        json_object *var_obj = 0;
 
-    void const *buf = 0;
+        void const *buf = 0;
 
             /* this rank actually has something to contribute to the H5Dwrite call */
-    if (part_obj)
-    {
-       int i;
-       TIO_Size_t starts[3], counts[3];
-       json_object *vars_array = json_object_path_get_array(part_obj, "Vars");
-       json_object *mesh_obj = json_object_path_get_object(part_obj, "Mesh");
-       json_object *var_obj = json_object_array_get_idx(vars_array, v);
-       json_object *extarr_obj = json_object_path_get_extarr(var_obj, "data");
-       json_object *global_log_origin_array =
-       json_object_path_get_array(part_obj, "GlobalLogOrigin");
-       json_object *global_log_indices_array =
-       json_object_path_get_array(part_obj, "GlobalLogIndices");
-       json_object *mesh_dims_array = json_object_path_get_array(mesh_obj, "LogDims");
-       for (i = 0; i < ndims; i++)
-       {
+        if (part_obj)
+        {
+         int i;
+         TIO_Size_t starts[3], counts[3];
+         json_object *vars_array = json_object_path_get_array(part_obj, "Vars");
+         json_object *mesh_obj = json_object_path_get_object(part_obj, "Mesh");
+         json_object *var_obj = json_object_array_get_idx(vars_array, v);
+         json_object *extarr_obj = json_object_path_get_extarr(var_obj, "data");
+         json_object *global_log_origin_array =
+         json_object_path_get_array(part_obj, "GlobalLogOrigin");
+         json_object *global_log_indices_array =
+         json_object_path_get_array(part_obj, "GlobalLogIndices");
+         json_object *mesh_dims_array = json_object_path_get_array(mesh_obj, "LogDims");
+         for (i = 0; i < ndims; i++)
+         {
           starts[ndims-1-i] =
           json_object_get_int(json_object_array_get_idx(global_log_origin_array,i));
           counts[ndims-1-i] =
           json_object_get_int(json_object_array_get_idx(mesh_dims_array,i));
           if (!strcmp(centering, "zone"))
           {
-             counts[ndims-1-i]--;
-             starts[ndims-1-i] -=
-             json_object_get_int(json_object_array_get_idx(global_log_indices_array,i));
-         }
-     }
+           counts[ndims-1-i]--;
+           starts[ndims-1-i] -=
+           json_object_get_int(json_object_array_get_idx(global_log_indices_array,i));
+       }
+   }
 
                 /* set selection of filespace */
-     buf = json_object_extarr_data(extarr_obj);
- }
- TIO_Data_t *var_dtype;
- TIO_Dims_t *var_ndims;
- TIO_Size_t *var_dims;
+   buf = json_object_extarr_data(extarr_obj);
+}
+TIO_Data_t *var_dtype;
+TIO_Dims_t *var_ndims;
+TIO_Size_t *var_dims;
 
- TIO_Call( TIO_Open_Variable(tiofile_id, state_id, varName, &ds_id, var_dtype, var_ndims, var_dims, NULL),
+TIO_Call( TIO_Open_Variable(tiofile_id, state_id, varName, &ds_id, var_dtype, var_ndims, var_dims, NULL),
     "Open Variable Failed\n");
 
- TIO_Call( TIO_Write_Variable(tiofile_id, ds_id, TIO_DOUBLE, buf),
+TIO_Call( TIO_Write_Variable(tiofile_id, ds_id, TIO_DOUBLE, buf),
     "Write Variable Failed\n");
 }
 
@@ -418,34 +450,34 @@ static void main_dump(int argi, int argc, char **argv, json_object *main_obj,
   json_object *parfmode_obj = json_object_path_get_array(main_obj, "clargs/parallel_file_mode");
   if (parfmode_obj)
   {
-     json_object *modestr = json_object_array_get_idx(parfmode_obj, 0);
-     json_object *filecnt = json_object_array_get_idx(parfmode_obj, 1);
+   json_object *modestr = json_object_array_get_idx(parfmode_obj, 0);
+   json_object *filecnt = json_object_array_get_idx(parfmode_obj, 1);
 #warning ERRORS NEED TO GO TO LOG FILES AND ERROR BEHAVIOR NEEDS TO BE HONORED
-     if (!strcmp(json_object_get_string(modestr), "SIF"))
-     {
-        main_dump_sif(main_obj, dumpn, dumpt);
-    }
-    else
-    {
-        numFiles = json_object_get_int(filecnt);
-        main_dump_mif(main_obj, numFiles, dumpn, dumpt);
-    }
+   if (!strcmp(json_object_get_string(modestr), "SIF"))
+   {
+    main_dump_sif(main_obj, dumpn, dumpt);
 }
 else
 {
- char const * modestr = json_object_path_get_string(main_obj, "clargs/parallel_file_mode");
- if (!strcmp(modestr, "SIF"))
- {
+    numFiles = json_object_get_int(filecnt);
+    main_dump_mif(main_obj, numFiles, dumpn, dumpt);
+}
+}
+else
+{
+   char const * modestr = json_object_path_get_string(main_obj, "clargs/parallel_file_mode");
+   if (!strcmp(modestr, "SIF"))
+   {
     float avg_num_parts = json_object_path_get_double(main_obj, "clargs/avg_num_parts");
     if (avg_num_parts == (float ((int) avg_num_parts)))
-       main_dump_sif(main_obj, dumpn, dumpt);
-   else
-   {
+     main_dump_sif(main_obj, dumpn, dumpt);
+ else
+ {
 #warning CURRENTLY, SIF CAN WORK ONLY ON WHOLE PART COUNTS
-       MACSIO_LOG_MSG(Die, ("HDF5 plugin cannot currently handle SIF mode where "
-          "there are different numbers of parts on each MPI rank. "
-          "Set --avg_num_parts to an integral value." ));
-   }
+     MACSIO_LOG_MSG(Die, ("HDF5 plugin cannot currently handle SIF mode where "
+      "there are different numbers of parts on each MPI rank. "
+      "Set --avg_num_parts to an integral value." ));
+ }
 }
 else if (!strcmp(modestr, "MIFMAX"))
     numFiles = json_object_path_get_int(main_obj, "parallel/mpi_size");
