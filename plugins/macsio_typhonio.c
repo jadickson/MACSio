@@ -314,7 +314,7 @@ static void main_dump_mif(json_object *main_obj, int numFiles, int dumpn, double
     for (v = -1; v < json_object_array_length(first_part_vars_array); v++) /* -1 start is for Mesh */
  {
 
-#warning SKIPPING MESH
+//warning SKIPPING MESH
         if (v == -1) continue; /* All ranks skip mesh (coords) for now */
 
         /* Inspect the first part's var object for name, datatype, etc. */
@@ -333,8 +333,8 @@ static void main_dump_mif(json_object *main_obj, int numFiles, int dumpn, double
 
      TIO_Call( TIO_Create_Variable(tiofile_id, state_id, varName, &ds_id, TIO_DOUBLE, ndims_tio, global_log_dims, NULL),
         "Create Variable failed\n");
-     TIO_Call( TIO_Close_Variable(tiofile_id, ds_id),
-        "Close Variable failed\n");
+       // TIO_Call( TIO_Close_Variable(tiofile_id, ds_id),
+       //  "Close Variable failed\n");
 
         /* Loop to make write calls for this var for each part on this rank */
      use_part_count = (int) ceil(json_object_path_get_double(main_obj, "clargs/avg_num_parts"));
@@ -378,10 +378,10 @@ static void main_dump_mif(json_object *main_obj, int numFiles, int dumpn, double
      }
      TIO_Data_t *var_dtype;
      TIO_Dims_t *var_ndims;
-     TIO_Size_t *var_dims;
+     TIO_Size_t var_dims[TIO_2D];
 
-     TIO_Call( TIO_Open_Variable(tiofile_id, state_id, varName, &ds_id, var_dtype, var_ndims, var_dims, NULL),
-        "Open Variable Failed\n");
+// TIO_Call( TIO_Open_Variable(tiofile_id, state_id, varName, &ds_id, var_dtype, var_ndims, var_dims, NULL),
+//     "Open Variable Failed\n");
 
      TIO_Call( TIO_Write_Variable(tiofile_id, ds_id, TIO_DOUBLE, buf),
         "Write Variable Failed\n");
