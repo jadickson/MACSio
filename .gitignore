@@ -3,3 +3,11 @@
 json-c/install
 json-c/build
 *.DS_Store*
+doc/doxyout
+results
+macsio/macsio
+macsio/probe
+macsio/probe.txt
+macsio/run_options
+macsio/tstlog
+macsio/tsttiming
