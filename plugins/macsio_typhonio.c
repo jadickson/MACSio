@@ -1,4 +1,5 @@
 #include <math.h>
+#include <time.h>
 
 #include <macsio_clargs.h>
 #include <macsio_iface.h>
