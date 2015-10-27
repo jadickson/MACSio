@@ -139,9 +139,7 @@ static void write_mesh_part(
     )
 {
   TIO_Object_t variable_id;
-  char var_namr[TIO_STRLEN];
   json_object *vars_array = json_object_path_get_array(part_obj, "Vars");
-
 
   for (int i = 0; i < json_object_array_length(vars_array); i++)
   {
@@ -162,9 +160,9 @@ static void write_mesh_part(
      for (j = 0; j < ndims; j++)
         var_dims[j] = json_object_extarr_dim(data_obj, j);
 
-    TIO_Call( TIO_Create_Variable(file_id, state_id, varname, &var_id, TIO_DOUBLE, ndims_tio, var_dims, NULL),
+    TIO_Call( TIO_Create_Variable(file_id, state_id, varname, &var_id, dtype_id, ndims_tio, var_dims, NULL),
         "Create variable failed\n");
-    TIO_Call( TIO_Write_Variable(file_id, var_id, TIO_DOUBLE, buf),
+    TIO_Call( TIO_Write_Variable(file_id, var_id, dtype_id, buf),
         "Write variable failed\n");
 
     TIO_Call( TIO_Close_Variable(file_id, var_id),
@@ -292,23 +290,11 @@ static void main_dump_mif(json_object *main_obj, int numFiles, int dumpn, double
      global_log_dims_zonal[ndims-1-i] = global_log_dims_nodal[ndims-1-i] -
      JsonGetInt(global_parts_log_dims_array, "", i);
  }
- 	// fspace_nodal_id = H5Screate_simple(ndims, global_log_dims_nodal, 0);
- 	// fspace_zonal_id = H5Screate_simple(ndims, global_log_dims_zonal, 0);
-
 
     /* Get the list of vars on the first part as a guide to loop over vars */
  json_object *part_array = json_object_path_get_array(main_obj, "problem/parts");
  json_object *first_part_obj = json_object_array_get_idx(part_array, 0);
  json_object *first_part_vars_array = json_object_path_get_array(first_part_obj, "Vars");
-
-    /* Dataset transfer property list used in all H5Dwrite calls */
-// #if H5_HAVE_PARALLEL
-//  	if (no_collective)
-//  		H5Pset_dxpl_mpio(dxpl_id, H5FD_MPIO_INDEPENDENT);
-//  	else
-//  		H5Pset_dxpl_mpio(dxpl_id, H5FD_MPIO_COLLECTIVE);
-// #endif
-
 
     /* Loop over vars and then over parts */
     /* currently assumes all vars exist on all ranks. but not all parts */
@@ -324,15 +310,14 @@ static void main_dump_mif(json_object *main_obj, int numFiles, int dumpn, double
      char *centering = strdup(json_object_path_get_string(var_obj, "centering"));
      json_object *dataobj = json_object_path_get_extarr(var_obj, "data");
 
-     TIO_Data_t dtype_id = json_object_extarr_type(dataobj)==json_extarr_type_flt64? 
-     TIO_DOUBLE:TIO_INT;
+     TIO_Data_t dtype_id = json_object_extarr_type(dataobj)==json_extarr_type_flt64?TIO_DOUBLE:TIO_INT;
 
      TIO_Size_t *global_log_dims = strcmp(centering, "zone") ? global_log_dims_nodal : global_log_dims_zonal;
 
      TIO_Object_t ds_id;
      TIO_Dims_t ndims_tio = (TIO_Dims_t)ndims;
 
-     TIO_Call( TIO_Create_Variable(tiofile_id, state_id, varName, &ds_id, TIO_DOUBLE, ndims_tio, global_log_dims, NULL),
+     TIO_Call( TIO_Create_Variable(tiofile_id, state_id, varName, &ds_id, dtype_id, ndims_tio, global_log_dims, NULL),
         "Create Variable failed\n");
        // TIO_Call( TIO_Close_Variable(tiofile_id, ds_id),
        //  "Close Variable failed\n");
@@ -384,7 +369,7 @@ static void main_dump_mif(json_object *main_obj, int numFiles, int dumpn, double
 // TIO_Call( TIO_Open_Variable(tiofile_id, state_id, varName, &ds_id, var_dtype, var_ndims, var_dims, NULL),
 //     "Open Variable Failed\n");
 
-     TIO_Call( TIO_Write_Variable(tiofile_id, ds_id, TIO_DOUBLE, buf),
+     TIO_Call( TIO_Write_Variable(tiofile_id, ds_id, dtype_id, buf),
         "Write Variable Failed\n");
  }
 
