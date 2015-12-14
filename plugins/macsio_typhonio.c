@@ -334,13 +334,23 @@ static void main_dump_sif(json_object *main_obj, int dumpn, double dumpt)
 	{
 		/* Inspect the first part's var object for name, datatype, etc. */
 		json_object *var_obj = json_object_array_get_idx(first_part_vars_array, v);
+
+// TODO When handing v=-1 (mesh coordinates) the following seg faults on archer due to missing json objects
+
+// TODO Chunks are set on mesh creation so chunk coordinates not required for writing quants
+
+		//DATA 
+		TIO_Object_t ds_id;
 		char const *varName = json_object_path_get_string(var_obj, "name");
 		char *centering = strdup(json_object_path_get_string(var_obj, "centering"));
 		json_object *dataobj = json_object_path_get_extarr(var_obj, "data");
-
-		TIO_Object_t ds_id;
 		TIO_Data_t dtype_id = json_object_extarr_type(dataobj) == json_extarr_type_flt64 ? TIO_DOUBLE : TIO_INT;
+		TIO_Centre_t tio_centering = strcmp(centering, "zone") ? TIO_CENTRE_NODE : TIO_CENTRE_CELL;
+
+		//MESH
 		TIO_Size_t *global_log_dims = strcmp(centering, "zone") ? global_log_dims_nodal : global_log_dims_zonal;
+		
+		
 		TIO_Dims_t ndims_tio = (TIO_Dims_t)ndims;
 
 		reverse_array(global_log_dims, ndims);
@@ -356,7 +366,7 @@ static void main_dump_sif(json_object *main_obj, int dumpn, double dumpt)
 
 			          "Mesh Create Failed\n");
 		} else{
-			TIO_Call( TIO_Create_Quant(tiofile_id, mesh_id, varName, &object_id, dtype_id, TIO_CENTRE_CELL,
+			TIO_Call( TIO_Create_Quant(tiofile_id, mesh_id, varName, &object_id, dtype_id, tio_centering,
 										TIO_GHOSTS_NONE, TIO_FALSE, "qunits"),
 					"Quant Create Failed\n");
 		}
@@ -390,7 +400,7 @@ static void main_dump_sif(json_object *main_obj, int dumpn, double dumpt)
 					    json_object_get_int(json_object_array_get_idx(global_log_origin_array, i));
 					counts[ndims - 1 - i] =
 					    json_object_get_int(json_object_array_get_idx(mesh_dims_array, i));
-					if (!strcmp(centering, "zone"))
+					if (!strcmp(centering, "zone") || v == -1)
 					{
 						counts[ndims - 1 - i]--;
 						starts[ndims - 1 - i] -=
@@ -418,7 +428,6 @@ static void main_dump_sif(json_object *main_obj, int dumpn, double dumpt)
 				MPI_Allgather(local_chunk_indices, 6, MPI_DOUBLE, chunk_indices, 6, MPI_DOUBLE, MACSIO_MAIN_Comm);
 
 				if (v == -1) {
-
 					for (int k=0; k<MACSIO_MAIN_Size; k++){
 						TIO_Call( TIO_Set_Quad_Chunk(tiofile_id, mesh_id, k, ndims_tio,
 												chunk_indices[k][0], chunk_indices[k][1],
@@ -427,6 +436,7 @@ static void main_dump_sif(json_object *main_obj, int dumpn, double dumpt)
 	                            				 (TIO_Size_t)0, (TIO_Size_t)0),
 	         				 "Set Quad Mesh Chunk Failed\n");
 					}
+
 					json_object *coords = json_object_path_get_object(mesh_obj, "Coords");
 
 					x_coord = json_object_extarr_data(json_object_path_get_extarr(coords, "XAxisCoords"));
