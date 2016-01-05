@@ -283,12 +283,6 @@ static void main_dump_sif(json_object *main_obj, int dumpn, double dumpt)
 
 	MPI_Info mpiInfo = MPI_INFO_NULL;
 
-#warning WE ARE DOING SIF SLIGHTLY WRONG, DUPLICATING SHARED NODES
-#warning INCLUDE ARGS FOR ISTORE AND K_SYM
-#warning INCLUDE ARG PROCESS FOR HINTS
-#warning FAPL PROPS: ALIGNMENT
-
-#warning FOR MIF, NEED A FILEROOT ARGUMENT OR CHANGE TO FILEFMT ARGUMENT
 	/* Construct name for the HDF5 file */
 	sprintf(fileName, "%s_typhonio_%03d.%s",
 	        json_object_path_get_string(main_obj, "clargs/filebase"),
@@ -304,7 +298,6 @@ static void main_dump_sif(json_object *main_obj, int dumpn, double dumpt)
 	TIO_Call( TIO_Create_State(tiofile_id, state_name, &state_id, 1, (TIO_Time_t)0.0, "us"),
 	          "State Create Failed\n");
 
-	/* Create an HDF5 Dataspace for the global whole of mesh and var objects in the file. */
 	ndims = json_object_path_get_int(main_obj, "clargs/part_dim");
 	json_object *global_log_dims_array =
 	    json_object_path_get_array(main_obj, "problem/global/LogDims");
@@ -335,24 +328,12 @@ static void main_dump_sif(json_object *main_obj, int dumpn, double dumpt)
 		/* Inspect the first part's var object for name, datatype, etc. */
 		json_object *var_obj = json_object_array_get_idx(first_part_vars_array, v);
 
-// TODO When handing v=-1 (mesh coordinates) the following seg faults on archer due to missing json objects
-
-// TODO Chunks are set on mesh creation so chunk coordinates not required for writing quants
-
-		//DATA 
-		TIO_Object_t ds_id;
-		char const *varName = json_object_path_get_string(var_obj, "name");
-		char *centering = strdup(json_object_path_get_string(var_obj, "centering"));
-		json_object *dataobj = json_object_path_get_extarr(var_obj, "data");
-		TIO_Data_t dtype_id = json_object_extarr_type(dataobj) == json_extarr_type_flt64 ? TIO_DOUBLE : TIO_INT;
-		TIO_Centre_t tio_centering = strcmp(centering, "zone") ? TIO_CENTRE_NODE : TIO_CENTRE_CELL;
+		char *centering = (char*)malloc(sizeof(char)*5);
+		TIO_Data_t dtype_id;
 
 		//MESH
-		TIO_Size_t *global_log_dims = strcmp(centering, "zone") ? global_log_dims_nodal : global_log_dims_zonal;
-		
-		
+		TIO_Size_t *global_log_dims = global_log_dims_nodal;
 		TIO_Dims_t ndims_tio = (TIO_Dims_t)ndims;
-
 		reverse_array(global_log_dims, ndims);
 
 		if (v == -1) {
@@ -366,6 +347,12 @@ static void main_dump_sif(json_object *main_obj, int dumpn, double dumpt)
 
 			          "Mesh Create Failed\n");
 		} else{
+			char const *varName = json_object_path_get_string(var_obj, "name");
+			centering = strdup(json_object_path_get_string(var_obj, "centering"));
+			json_object *dataobj = json_object_path_get_extarr(var_obj, "data");
+			dtype_id = json_object_extarr_type(dataobj) == json_extarr_type_flt64 ? TIO_DOUBLE : TIO_INT;
+			TIO_Centre_t tio_centering = strcmp(centering, "zone") ? TIO_CENTRE_NODE : TIO_CENTRE_CELL;
+
 			TIO_Call( TIO_Create_Quant(tiofile_id, mesh_id, varName, &object_id, dtype_id, tio_centering,
 										TIO_GHOSTS_NONE, TIO_FALSE, "qunits"),
 					"Quant Create Failed\n");
@@ -385,49 +372,49 @@ static void main_dump_sif(json_object *main_obj, int dumpn, double dumpt)
 
 			if (part_obj)
 			{
+				//Both
 				int i;
-				TIO_Size_t starts[3], counts[3];
-				json_object *vars_array = json_object_path_get_array(part_obj, "Vars");
-				json_object *mesh_obj = json_object_path_get_object(part_obj, "Mesh");
-				json_object *var_obj = json_object_array_get_idx(vars_array, v);
-				json_object *extarr_obj = json_object_path_get_extarr(var_obj, "data");
-				json_object *global_log_origin_array = json_object_path_get_array(part_obj, "GlobalLogOrigin");
-				json_object *global_log_indices_array = json_object_path_get_array(part_obj, "GlobalLogIndices");
-				json_object *mesh_dims_array = json_object_path_get_array(mesh_obj, "LogDims");
-				for (i = 0; i < ndims; i++)
-				{
-					starts[ndims - 1 - i] =
-					    json_object_get_int(json_object_array_get_idx(global_log_origin_array, i));
-					counts[ndims - 1 - i] =
-					    json_object_get_int(json_object_array_get_idx(mesh_dims_array, i));
-					if (!strcmp(centering, "zone") || v == -1)
-					{
-						counts[ndims - 1 - i]--;
-						starts[ndims - 1 - i] -=
-						    json_object_get_int(json_object_array_get_idx(global_log_indices_array, i));
-					}
-				}
-
-				TIO_Size_t local_chunk_indices[6] = {0,0,0,0,0,0};	/* local_chunk_indices [il, ih, jl, jh, kl, kh] */
-
-				// Sets the upper and lower index in each dimension for the current ranks chunk
-				local_chunk_indices[0] = starts[0];
-				local_chunk_indices[1] = starts[0] + counts[0];
-
-				if (ndims > 1) {
-					local_chunk_indices[2] = starts[1];
-					local_chunk_indices[3] = starts[1] + counts[1];
-					if (ndims > 2) {
-						local_chunk_indices[4] = starts[2];
-						local_chunk_indices[5] = starts[2] + counts[2];
-					}
-				}
-								
-				TIO_Size_t chunk_indices[MACSIO_MAIN_Size][6];
-
-				MPI_Allgather(local_chunk_indices, 6, MPI_DOUBLE, chunk_indices, 6, MPI_DOUBLE, MACSIO_MAIN_Comm);
 
 				if (v == -1) {
+					//Mesh
+					TIO_Size_t starts[3], counts[3];
+					json_object *mesh_obj = json_object_path_get_object(part_obj, "Mesh");
+					json_object *global_log_origin_array = json_object_path_get_array(part_obj, "GlobalLogOrigin");
+					json_object *global_log_indices_array = json_object_path_get_array(part_obj, "GlobalLogIndices");
+					json_object *mesh_dims_array = json_object_path_get_array(mesh_obj, "LogDims");
+
+					for (i = 0; i < ndims; i++)
+					{
+						starts[ndims - 1 - i] =
+						    json_object_get_int(json_object_array_get_idx(global_log_origin_array, i));
+						counts[ndims - 1 - i] =
+						    json_object_get_int(json_object_array_get_idx(mesh_dims_array, i));
+						if (!strcmp(centering, "zone") || v == -1)
+						{
+							counts[ndims - 1 - i]--;
+							starts[ndims - 1 - i] -=
+							    json_object_get_int(json_object_array_get_idx(global_log_indices_array, i));
+						}
+					}
+
+					TIO_Size_t local_chunk_indices[6] = {0,0,0,0,0,0};	/* local_chunk_indices [il, ih, jl, jh, kl, kh] */
+
+					// Sets the upper and lower index in each dimension for the current ranks chunk
+					local_chunk_indices[0] = starts[0];
+					local_chunk_indices[1] = starts[0] + counts[0];
+
+					if (ndims > 1) {
+						local_chunk_indices[2] = starts[1];
+						local_chunk_indices[3] = starts[1] + counts[1];
+						if (ndims > 2) {
+							local_chunk_indices[4] = starts[2];
+							local_chunk_indices[5] = starts[2] + counts[2];
+						}
+					}
+									
+					TIO_Size_t chunk_indices[MACSIO_MAIN_Size][6];
+					MPI_Allgather(local_chunk_indices, 6, MPI_DOUBLE, chunk_indices, 6, MPI_DOUBLE, MACSIO_MAIN_Comm);
+
 					for (int k=0; k<MACSIO_MAIN_Size; k++){
 						TIO_Call( TIO_Set_Quad_Chunk(tiofile_id, mesh_id, k, ndims_tio,
 												chunk_indices[k][0], chunk_indices[k][1],
@@ -443,6 +430,11 @@ static void main_dump_sif(json_object *main_obj, int dumpn, double dumpt)
 					y_coord = json_object_extarr_data(json_object_path_get_extarr(coords, "YAxisCoords"));
 					z_coord = json_object_extarr_data(json_object_path_get_extarr(coords, "ZAxisCoords"));
 				} else {
+					//Variable 
+					json_object *vars_array = json_object_path_get_array(part_obj, "Vars");
+					json_object *var_obj = json_object_array_get_idx(vars_array, v);
+					json_object *extarr_obj = json_object_path_get_extarr(var_obj, "data");
+
 					buf = json_object_extarr_data(extarr_obj);
 				}
 			}
@@ -453,8 +445,7 @@ static void main_dump_sif(json_object *main_obj, int dumpn, double dumpt)
 					"Write Quad Mesh All Failed\n");
 				}
 	    
-			} else {
-
+			} else {				
 				TIO_Call( TIO_Write_QuadQuant_Chunk(tiofile_id, object_id, MACSIO_MAIN_Rank, 
 												TIO_XFER, dtype_id, buf, (void*)TIO_NULL),
 					"Write Quad Quant Chunk Failed\n");
