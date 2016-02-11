@@ -35,6 +35,8 @@ Place, Suite 330, Boston, MA 02111-1307 USA
   #include <windows.h>
 #endif
 
+#include <json-cwx/json.h>
+
 #include <macsio_clargs.h>
 #include <macsio_data.h>
 #include <macsio_iface.h>
@@ -348,7 +350,7 @@ static void CloseSiloFile(void *file, void *userData)
         DBClose(siloFile);
 }
 
-static void write_rect_mesh_part(DBfile *dbfile, json_object *part)
+static void write_quad_mesh_part(DBfile *dbfile, json_object *part, int silo_mesh_type)
 {
     json_object *coordobj;
     char const *coordnames[] = {"X","Y","Z"};
@@ -357,13 +359,20 @@ static void write_rect_mesh_part(DBfile *dbfile, json_object *part)
     int dims[3] = {1,1,1};
     int dimsz[3] = {1,1,1};
 
-    coordobj = JsonGetObj(part, "Mesh/Coords/XAxisCoords");
+#warning SHOULD REALLY MAKE COORD MEMBER NAMES FOR ALL CASES INSTEAD OF XAXISCOORDS AND XCOORDS
+    if (silo_mesh_type == DB_COLLINEAR)	
+        coordobj = JsonGetObj(part, "Mesh/Coords/XAxisCoords");
+    else
+        coordobj = JsonGetObj(part, "Mesh/Coords/XCoords");
     coords[0] = json_object_extarr_data(coordobj);
     dims[0] = JsonGetInt(part, "Mesh/LogDims", 0);
     dimsz[0] = dims[0]-1;
     if (ndims > 1)
     {
-        coordobj = JsonGetObj(part, "Mesh/Coords/YAxisCoords");
+        if (silo_mesh_type == DB_COLLINEAR)	
+            coordobj = JsonGetObj(part, "Mesh/Coords/YAxisCoords");
+        else
+            coordobj = JsonGetObj(part, "Mesh/Coords/YCoords");
         coords[1] = json_object_extarr_data(coordobj);
         dims[1] = JsonGetInt(part, "Mesh/LogDims", 1);
         dimsz[1] = dims[1]-1;
@@ -371,14 +380,17 @@ static void write_rect_mesh_part(DBfile *dbfile, json_object *part)
     }
     if (ndims > 2)
     {
-        coordobj = JsonGetObj(part, "Mesh/Coords/ZAxisCoords");
+        if (silo_mesh_type == DB_COLLINEAR)	
+            coordobj = JsonGetObj(part, "Mesh/Coords/ZAxisCoords");
+        else
+            coordobj = JsonGetObj(part, "Mesh/Coords/ZCoords");
         coords[2] = json_object_extarr_data(coordobj);
         dims[2] = JsonGetInt(part, "Mesh/LogDims", 2);
         dimsz[2] = dims[2]-1;
     }
 
     DBPutQuadmesh(dbfile, "mesh", (char**) coordnames, coords,
-        dims, ndims, DB_DOUBLE, DB_COLLINEAR, 0);
+        dims, ndims, DB_DOUBLE, silo_mesh_type, 0);
 
     json_object *vars_array = JsonGetObj(part, "Vars");
     for (int i = 0; i < json_object_array_length(vars_array); i++)
@@ -394,10 +406,130 @@ static void write_rect_mesh_part(DBfile *dbfile, json_object *part)
     }
 }
 
+static void write_ucdzoo_mesh_part(DBfile *dbfile, json_object *part, char const *topo_name)
+{
+    json_object *coordobj, *topoobj;
+    char const *coordnames[] = {"X","Y","Z"};
+    void const *coords[3];
+    int ndims = JsonGetInt(part, "Mesh/GeomDim");
+    int nnodes = 1, nzones = 1;
+    int dims[3] = {1,1,1};
+    int dimsz[3] = {1,1,1};
+
+    coordobj = JsonGetObj(part, "Mesh/Coords/XCoords");
+    coords[0] = json_object_extarr_data(coordobj);
+    dims[0] = JsonGetInt(part, "Mesh/LogDims", 0);
+    dimsz[0] = dims[0]-1;
+    nnodes *= dims[0];
+    nzones *= dimsz[0];
+    if (ndims > 1)
+    {
+        coordobj = JsonGetObj(part, "Mesh/Coords/YCoords");
+        coords[1] = json_object_extarr_data(coordobj);
+        dims[1] = JsonGetInt(part, "Mesh/LogDims", 1);
+        dimsz[1] = dims[1]-1;
+        nnodes *= dims[1];
+        nzones *= dimsz[1];
+    }
+    if (ndims > 2)
+    {
+        coordobj = JsonGetObj(part, "Mesh/Coords/ZCoords");
+        coords[2] = json_object_extarr_data(coordobj);
+        dims[2] = JsonGetInt(part, "Mesh/LogDims", 2);
+        dimsz[2] = dims[2]-1;
+        nnodes *= dims[2];
+        nzones *= dimsz[2];
+    }
+
+    if (ndims == 1 || !strcmp(topo_name, "ucdzoo"))
+    {
+        DBPutUcdmesh(dbfile, "mesh", ndims, (DBCAS_t) coordnames,
+            coords, nnodes, nzones, "zl", NULL, DB_DOUBLE, NULL);
+    }
+    else if (!strcmp(topo_name, "arbitrary"))
+    {
+        DBoptlist *ol = DBMakeOptlist(1);
+        DBAddOption(ol, DBOPT_PHZONELIST, (char *) "phzl");
+        DBPutUcdmesh(dbfile, "mesh", ndims, (DBCAS_t) coordnames,
+            coords, nnodes, nzones, NULL, NULL, DB_DOUBLE, ol);
+        DBFreeOptlist(ol);
+    }
+
+    /* Write out explicit topology */
+    if (ndims == 1 || !strcmp(topo_name, "ucdzoo"))
+    {
+        json_object *topoobj = JsonGetObj(part, "Mesh/Topology");
+        json_object *nlobj = JsonGetObj(topoobj, "Nodelist");
+        int const *nodelist = (int const *) json_object_extarr_data(nlobj);
+        int lnodelist = json_object_extarr_nvals(nlobj);
+        int shapetype, shapesize, shapecnt = nzones;
+
+        if (!strcmp(JsonGetStr(topoobj, "ElemType"), "Beam2"))
+        {
+            shapesize = 2;
+            shapetype = DB_ZONETYPE_BEAM;
+        }
+        else if (!strcmp(JsonGetStr(topoobj, "ElemType"), "Quad4"))
+        {
+            shapesize = 4;
+            shapetype = DB_ZONETYPE_QUAD;
+        }
+        else if (!strcmp(JsonGetStr(topoobj, "ElemType"), "Hex8"))
+        {
+            shapesize = 8;
+            shapetype = DB_ZONETYPE_HEX;
+        }
+
+        DBPutZonelist2(dbfile, "zl", nzones, ndims, nodelist, lnodelist, 0, 0, 0,
+            &shapetype, &shapesize, &shapecnt, 1,NULL);
+    }
+    else if (!strcmp(topo_name, "arbitrary"))
+    {
+        json_object *topoobj = JsonGetObj(part, "Mesh/Topology");
+        json_object *nlobj = JsonGetObj(topoobj, "Nodelist");
+        int const *nodelist = (int const *) json_object_extarr_data(nlobj);
+        int lnodelist = json_object_extarr_nvals(nlobj);
+        json_object *ncobj = JsonGetObj(topoobj, "NodeCounts");
+        int const *nodecnt = (int const *) json_object_extarr_data(ncobj);
+        int nfaces = json_object_extarr_nvals(ncobj);
+        json_object *flobj = JsonGetObj(topoobj, "Facelist");
+        int const *facelist = (int const *) json_object_extarr_data(flobj);
+        int lfacelist = json_object_extarr_nvals(flobj);
+        json_object *fcobj = JsonGetObj(topoobj, "FaceCounts");
+        int const *facecnt = (int const *) json_object_extarr_data(fcobj);
+        int i;
+
+        DBPutPHZonelist(dbfile, "phzl",
+            nfaces, nodecnt, lnodelist, nodelist, NULL,
+            nzones, facecnt, lfacelist, facelist,
+            0, 0, nzones-1, NULL);
+    }
+
+    json_object *vars_array = JsonGetObj(part, "Vars");
+    for (int i = 0; i < json_object_array_length(vars_array); i++)
+    {
+        json_object *varobj = json_object_array_get_idx(vars_array, i);
+        int cent = strcmp(JsonGetStr(varobj, "centering"),"zone")?DB_NODECENT:DB_ZONECENT;
+        int cnt = cent==DB_NODECENT?nnodes:nzones;
+        json_object *dataobj = JsonGetObj(varobj, "data");
+        int dtype = json_object_extarr_type(dataobj)==json_extarr_type_flt64?DB_DOUBLE:DB_INT;
+        
+        DBPutUcdvar1(dbfile, JsonGetStr(varobj, "name"), "mesh",
+            (void*)json_object_extarr_data(dataobj), cnt, NULL, 0, dtype, cent, NULL);
+
+    }
+}
+
 static void write_mesh_part(DBfile *dbfile, json_object *part)
 {
     if (!strcmp(JsonGetStr(part, "Mesh/MeshType"), "rectilinear"))
-        write_rect_mesh_part(dbfile, part);
+        write_quad_mesh_part(dbfile, part, DB_COLLINEAR);
+    else if (!strcmp(JsonGetStr(part, "Mesh/MeshType"), "curvilinear"))
+        write_quad_mesh_part(dbfile, part, DB_NONCOLLINEAR);
+    else if (!strcmp(JsonGetStr(part, "Mesh/MeshType"), "ucdzoo"))
+        write_ucdzoo_mesh_part(dbfile, part, "ucdzoo");
+    else if (!strcmp(JsonGetStr(part, "Mesh/MeshType"), "arbitrary"))
+        write_ucdzoo_mesh_part(dbfile, part, "arbitrary");
 }
 
 static void WriteMultiXXXObjects(json_object *main_obj, DBfile *siloFile, int dumpn, MACSIO_MIF_baton_t *bat)
@@ -408,6 +540,28 @@ static void WriteMultiXXXObjects(json_object *main_obj, DBfile *siloFile, int du
     int numChunks = JsonGetInt(main_obj, "problem/global/TotalParts");
     char **blockNames = (char **) malloc(numChunks * sizeof(char*));
     int *blockTypes = (int *) malloc(numChunks * sizeof(int));
+    int mblockType, vblockType;
+
+    if (!strcmp(JsonGetStr(main_obj, "problem/parts",0,"Mesh/MeshType"), "rectilinear"))
+    {
+        mblockType = DB_QUADMESH;
+        vblockType = DB_QUADVAR;
+    }
+    else if (!strcmp(JsonGetStr(main_obj, "problem/parts",0,"Mesh/MeshType"), "curvilinear"))
+    {
+        mblockType = DB_QUADMESH;
+        vblockType = DB_QUADVAR;
+    }
+    else if (!strcmp(JsonGetStr(main_obj, "problem/parts",0,"Mesh/MeshType"), "ucdzoo"))
+    {
+        mblockType = DB_UCDMESH;
+        vblockType = DB_UCDVAR;
+    }
+    else if (!strcmp(JsonGetStr(main_obj, "problem/parts",0,"Mesh/MeshType"), "arbitrary"))
+    {
+        mblockType = DB_UCDMESH;
+        vblockType = DB_UCDVAR;
+    }
 
     /* Go to root directory in the silo file */
     DBSetDir(siloFile, "/");
@@ -432,7 +586,7 @@ static void WriteMultiXXXObjects(json_object *main_obj, DBfile *siloFile, int du
                 JsonGetStr(main_obj, "clargs/fileext"),
                 i);
         }
-        blockTypes[i] = DB_QUADMESH;
+        blockTypes[i] = mblockType ;
     }
 
     /* Write the multi-block objects */
@@ -464,7 +618,7 @@ static void WriteMultiXXXObjects(json_object *main_obj, DBfile *siloFile, int du
                     i,
                     JsonGetStr(vars_array, "", j, "name"));
             }
-            blockTypes[i] = DB_QUADVAR;
+            blockTypes[i] = vblockType;
         }
 
         /* Write the multi-block objects */
