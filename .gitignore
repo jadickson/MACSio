@@ -1,7 +1,7 @@
 *.o
 *.swp
-json-c/install
-json-c/build
+json-cwx/install
+json-cwx/build
 *.DS_Store*
 doc/doxyout
 results
