@@ -359,14 +359,44 @@ static void write_ucdzoo_mesh_part(
     else if (!strcmp(topo_name, "arbitrary"))
     /* ARBITRARY */
     {
-    	// TIO_Call( TIO_Create_Mesh(file_id, state_id, "mesh", &mesh_id, TIO_MESH_UNSTRUCT,
-    	// 						TIO_COORD_CARTESIAN, TIO_FALSE, "mesh_group", (TIO_Size_t)1,
-    	// 						TIO_INT, TIO_DOUBLE, (TIO_Dims_t)ndims,
-    	// 						(TIO_Size_t)nnodes, (TIO_Size_t)ncells, (TIO_Size_t)nshapes,
-    	// 						TIO_NULL, (TIO_Size_t)1,
-    	// 						NULL, NULL, NULL,
-    	// 						NULL, NULL, NULL),
-    	// 					"Create Arbitrary Unstructured Mesh Failed\n");
+ 		json_object *topoobj = JsonGetObj(part_obj, "Mesh/Topology");
+        json_object *nlobj = JsonGetObj(topoobj, "Nodelist");
+        void const *nodelist = (void const*) json_object_extarr_data(nlobj);
+        json_object *ncobj = JsonGetObj(topoobj, "NodeCounts");
+        int const *nodecnt = (int const *) json_object_extarr_data(ncobj);
+        int nfaces = json_object_extarr_nvals(ncobj);
+        json_object *flobj = JsonGetObj(topoobj, "Facelist");
+        int const *facelist = (int const *) json_object_extarr_data(flobj);
+        int lfacelist = json_object_extarr_nvals(flobj);
+        json_object *fcobj = JsonGetObj(topoobj, "FaceCounts");
+        int const *facecnt = (int const *) json_object_extarr_data(fcobj);
+
+        int ncells = nzones;
+        TIO_Size_t nshapes = MACSIO_MAIN_Size;
+        TIO_Size_t nconnectivity = 0;//ncells*shapesize;
+        TIO_Shape_t *shapetype = (TIO_Shape_t*)malloc(nshapes * sizeof(TIO_Shape_t));
+        for (int s = 0; s<nshapes; s++){
+        	shapetype[s] = (TIO_Shape_t)4; // Abribtrary polygon with 4 nodes
+        }  
+
+    	TIO_Call( TIO_Create_Mesh(file_id, state_id, "mesh", &mesh_id, TIO_MESH_UNSTRUCT,
+    							TIO_COORD_CARTESIAN, TIO_FALSE, "mesh_group", (TIO_Size_t)1,
+    							TIO_INT, TIO_DOUBLE, (TIO_Dims_t)ndims,
+    							(TIO_Size_t)nnodes, (TIO_Size_t)ncells, (TIO_Size_t)nshapes,
+    							TIO_NULL, (TIO_Size_t)1,
+    							NULL, NULL, NULL,
+    							NULL, NULL, NULL),
+    						"Create Arbitrary Unstructured Mesh Failed\n");
+
+    	TIO_Call( TIO_Set_Unstr_Chunk(file_id, mesh_id, (TIO_Size_t)0, (TIO_Dims_t)ndims, (TIO_Size_t)nnodes,
+    							ncells, nshapes, nconnectivity, 0, 0, 0, 0, 0, 0),
+    						"Set Arbitrary Mesh Chunk Failed");
+
+    	 TIO_Call( TIO_Write_UnstrMesh_Chunk(file_id, mesh_id, (TIO_Size_t)0, TIO_XFER_INDEPENDENT,
+        								TIO_INT, TIO_DOUBLE, nodelist, nodelist, shapetype, 
+        								&ncells, (const void*)NULL, coords[0], coords[1], coords[2]),
+        					"Write unstructured Mesh Failed\n");
+    	 free(shapetype);
     }	
 
 	TIO_Object_t variable_id;
@@ -506,6 +536,14 @@ void reverse_array(TIO_Size_t *pointer, int n)
 
 	free(s);
 }
+
+// static void write_quad_mesh_shared(
+// 	TIO_File_t file_id, 
+// 	TIO_Object_t state_id,
+// 	json_object *main_obj )
+// {
+
+// }
 
 static void main_dump_sif(json_object *main_obj, int dumpn, double dumpt)
 {
