@@ -370,6 +370,10 @@ static void main_dump_sif(json_object *main_obj, int dumpn, double dumpt)
 			void const *y_coord = 0;
 			void const *z_coord = 0;
 
+			void *x_coord_root = 0;
+			void *y_coord_root = 0;
+			void *z_coord_root = 0;
+
 			if (part_obj)
 			{
 				//Both
@@ -429,6 +433,34 @@ static void main_dump_sif(json_object *main_obj, int dumpn, double dumpt)
 					x_coord = json_object_extarr_data(json_object_path_get_extarr(coords, "XAxisCoords"));
 					y_coord = json_object_extarr_data(json_object_path_get_extarr(coords, "YAxisCoords"));
 					z_coord = json_object_extarr_data(json_object_path_get_extarr(coords, "ZAxisCoords"));
+
+					if (MACSIO_MAIN_Rank == 0){
+						x_coord_root = malloc(global_log_dims[0] * sizeof(double));
+						y_coord_root = malloc(global_log_dims[1] * sizeof(double));
+						z_coord_root = malloc(global_log_dims[2] * sizeof(double));
+					}
+
+					json_object *bounds = json_object_path_get_array(mesh_obj, "Bounds");
+
+					int color = (JsonGetInt(bounds,"",1) == 0 && JsonGetInt(bounds,"",2) ==0) ? 1: MPI_UNDEFINED;
+					MPI_Comm comm;
+					MPI_Comm_split(MACSIO_MAIN_Comm, color, MACSIO_MAIN_Rank, &comm);
+					if (color == 1){
+					MPI_Gather(x_coord, 100, MPI_DOUBLE, x_coord_root, 100, MPI_DOUBLE, 0, comm);
+					}
+					if (ndims > 1){
+						color = (JsonGetInt(bounds, "", 0)==0 && JsonGetInt(bounds,"",2)==0) ? 1: MPI_UNDEFINED;
+						MPI_Comm_split(MACSIO_MAIN_Comm, color, MACSIO_MAIN_Rank, &comm);
+						if (color == 1)
+						MPI_Gather(y_coord, 100, MPI_DOUBLE, y_coord_root, 100, MPI_DOUBLE, 0, comm);
+					}
+					if (ndims > 2){
+						color = (JsonGetInt(bounds, "", 0)==0 && JsonGetInt(bounds,"",1)==0) ? 1: MPI_UNDEFINED;
+						MPI_Comm_split(MACSIO_MAIN_Comm, color, MACSIO_MAIN_Rank, &comm);
+						if (color == 1)
+						MPI_Gather(z_coord, 100, MPI_DOUBLE, z_coord_root, 100, MPI_DOUBLE, 0, comm);
+					}
+
 				} else {
 					//Variable 
 					json_object *vars_array = json_object_path_get_array(part_obj, "Vars");
@@ -440,10 +472,19 @@ static void main_dump_sif(json_object *main_obj, int dumpn, double dumpt)
 			}
 
 			if (v == -1) {
+
+				/* Gather coordinates on root process */ 
+
+
 				if (MACSIO_MAIN_Rank == 0){
-				TIO_Call( TIO_Write_QuadMesh_All(tiofile_id, mesh_id, TIO_DOUBLE, x_coord, y_coord, z_coord),
+
+				TIO_Call( TIO_Write_QuadMesh_All(tiofile_id, mesh_id, TIO_DOUBLE, x_coord_root, y_coord_root, z_coord_root),
 					"Write Quad Mesh All Failed\n");
 				}
+
+				free(x_coord_root);
+			// free(y_coord_root);
+			// free(z_coord_root);
 	    
 			} else {				
 				TIO_Call( TIO_Write_QuadQuant_Chunk(tiofile_id, object_id, MACSIO_MAIN_Rank, 
