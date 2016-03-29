@@ -162,8 +162,6 @@ static void write_quad_mesh_part(
 	else
 	{
 		coordobj = JsonGetObj(part_obj, "Mesh/Coords/XCoords");	// Curv Mesh
-		/* For non-colinear mesh, TyphonIO misses out the end cell in each dimension so increment by one */
-		//dims[0]++;
 	}
 
 	coords[0] = json_object_extarr_data(coordobj);
@@ -180,8 +178,6 @@ static void write_quad_mesh_part(
 		else
 		{
 			coordobj = JsonGetObj(part_obj, "Mesh/Coords/YCoords");
-			/* When creating a non-colinear mesh, TyphonIO takes the dimension as an index and missed out the end cell in each dimension so it needs to be incremented */
-			//dims[1]++;
 		}
 		coords[1] = json_object_extarr_data(coordobj);
 	}
@@ -196,7 +192,6 @@ static void write_quad_mesh_part(
 		else
 		{
 			coordobj = JsonGetObj(part_obj, "Mesh/Coords/ZCoords");
-			//dims[2]++;
 		}
 		coords[2] = json_object_extarr_data(coordobj);
 	}
@@ -205,14 +200,14 @@ static void write_quad_mesh_part(
 							TIO_COORD_CARTESIAN, TIO_FALSE, "mesh_group", (TIO_Size_t)1,
 							TIO_DATATYPE_NULL, TIO_DOUBLE, (TIO_Dims_t)ndims,
 							(TIO_Size_t)dims[0], (TIO_Size_t)dims[1], (TIO_Size_t)dims[2],
-							TIO_NULL, (TIO_Size_t)1,
+							TIO_GHOSTS_NONE, (TIO_Size_t)1,
 							NULL, NULL, NULL,
 			                NULL, NULL, NULL),
 						"Create Mesh Failed\n");
 
 	if (tio_mesh_type == TIO_MESH_QUAD_COLINEAR){
 		TIO_Call( TIO_Set_Quad_Chunk(file_id, mesh_id, (TIO_Size_t)0, (TIO_Dims_t)ndims,
-							0, dims[0], 0, dims[1], 0, dims[2],
+							0, dims[0]-1, 0, dims[1]-1, 0, dims[2]-1,
 							0, 0),
 			"Set Quad Mesh Chunk Failed");
 		TIO_Call( TIO_Write_QuadMesh_All(file_id, mesh_id, TIO_DOUBLE, coords[0], coords[1], coords[2]),
@@ -221,7 +216,7 @@ static void write_quad_mesh_part(
 	else 
 	{
 		TIO_Call( TIO_Set_Quad_Chunk(file_id, mesh_id, (TIO_Size_t)0, (TIO_Dims_t)ndims,
-							0, dims[0]+1, 0, dims[1]+1, 0, dims[2]+1,
+							0, dims[0]-1, 0, dims[1]-1, 0, dims[2]-1,
 							0, 0),
 			"Set Quad Mesh Chunk Failed");
 		TIO_Call( TIO_Write_QuadMesh_Chunk(file_id, mesh_id, 0, TIO_XFER_INDEPENDENT, 
@@ -341,8 +336,8 @@ static void write_ucdzoo_mesh_part(
         TIO_Call( TIO_Create_Mesh(file_id, state_id, "mesh", &mesh_id, TIO_MESH_UNSTRUCT,
         						TIO_COORD_CARTESIAN, TIO_FALSE, "mesh_group", (TIO_Size_t)1,
         						TIO_INT, TIO_DOUBLE, (TIO_Dims_t)ndims, 
-        						(TIO_Size_t)nnodes, (TIO_Size_t)ncells, (TIO_Size_t)nshapes,
-								TIO_NULL, (TIO_Size_t)1,
+        						(TIO_Size_t)nnodes, (TIO_Size_t)ncells, nshapes,
+								nconnectivity, (TIO_Size_t)1,
 								NULL, NULL, NULL,
 				                NULL, NULL, NULL),
 							"Create Mesh Failed\n");
@@ -382,8 +377,8 @@ static void write_ucdzoo_mesh_part(
     	TIO_Call( TIO_Create_Mesh(file_id, state_id, "mesh", &mesh_id, TIO_MESH_UNSTRUCT,
     							TIO_COORD_CARTESIAN, TIO_FALSE, "mesh_group", (TIO_Size_t)1,
     							TIO_INT, TIO_DOUBLE, (TIO_Dims_t)ndims,
-    							(TIO_Size_t)nnodes, (TIO_Size_t)ncells, (TIO_Size_t)nshapes,
-    							TIO_NULL, (TIO_Size_t)1,
+    							(TIO_Size_t)nnodes, (TIO_Size_t)ncells, nshapes,
+    							nconnectivity, (TIO_Size_t)1,
     							NULL, NULL, NULL,
     							NULL, NULL, NULL),
     						"Create Arbitrary Unstructured Mesh Failed\n");
