@@ -1,5 +1,6 @@
-HDF5_HOME=/usr/local/Cellar/hdf5/1.8.15
+HDF5_HOME=/usr/local/Cellar/hdf5/1.8.12_1
 TYPHONIO_HOME=/Users/James/Development/typhonio/build/gcc
+SILO_HOME=/Users/James/Development/Silo
 
 CXX=mpicxx
 CC=mpicc
