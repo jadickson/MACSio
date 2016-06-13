@@ -259,7 +259,7 @@ static void write_quad_mesh_part(
 					"Write Quad Quant Var Failed\n");
 		TIO_Call( TIO_Close_Quant(file_id, var_id),
 					"Close Quant Failed\n");
-		
+
 	}
 	TIO_Call( TIO_Close_Mesh(file_id, mesh_id),
 		"Close Mesh failed\n");
@@ -412,6 +412,8 @@ static void write_ucdzoo_mesh_part(
 		json_object *var_obj = json_object_array_get_idx(vars_array, i);
 		json_object *data_obj = json_object_path_get_extarr(var_obj, "data");
 		char const *varname = json_object_path_get_string(var_obj, "name");
+		char *centering = strdup(json_object_path_get_string(var_obj, "centering"));
+		TIO_Centre_t tio_centering = strcmp(centering, "zone") ? TIO_CENTRE_NODE : TIO_CENTRE_CELL;
 		int ndims = json_object_extarr_ndims(data_obj);
 		void const *buf = json_object_extarr_data(data_obj);
 
@@ -421,13 +423,14 @@ static void write_ucdzoo_mesh_part(
 		for (j = 0; j < ndims; j++)
 			var_dims[j] = json_object_extarr_dim(data_obj, j);
 
-		TIO_Call( TIO_Create_Variable(file_id, mesh_id, varname, &var_id, dtype_id, (TIO_Dims_t)ndims, var_dims, NULL),
-		          "Create variable failed\n");
-		TIO_Call( TIO_Write_Variable(file_id, var_id, dtype_id, buf),
-		          "Write variable failed\n");
-
-		TIO_Call( TIO_Close_Variable(file_id, var_id),
-		          "Close variable failed\n");
+		TIO_Call( TIO_Create_Quant(file_id, mesh_id, varname, &var_id, dtype_id, tio_centering,
+								TIO_GHOSTS_NONE, TIO_FALSE, "quints"),
+						"Unstructured Quant Create Failed\n");
+		TIO_Call( TIO_Write_UnstrQuant_Chunk(file_id, var_id, (TIO_Size_t)0, TIO_XFER_INDEPENDENT,
+										dtype_id, buf, (void*)TIO_NULL),
+						"Write Unstructured Quant Chunk Failed\n");
+		TIO_Call( TIO_Close_Quant(file_id, var_id),
+						"Close Unstructured Quant Failed\n");
 	}	    
 
 
