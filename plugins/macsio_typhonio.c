@@ -237,6 +237,8 @@ static void write_quad_mesh_part(
 		json_object *var_obj = json_object_array_get_idx(vars_array, i);
 		json_object *data_obj = json_object_path_get_extarr(var_obj, "data");
 		char const *varname = json_object_path_get_string(var_obj, "name");
+		char *centering = strdup(json_object_path_get_string(var_obj, "centering"));
+		TIO_Centre_t tio_centering = strcmp(centering, "zone") ? TIO_CENTRE_NODE : TIO_CENTRE_CELL;
 		int ndims = json_object_extarr_ndims(data_obj);
 		void const *buf = json_object_extarr_data(data_obj);
 
@@ -248,13 +250,16 @@ static void write_quad_mesh_part(
 		for (j = 0; j < ndims; j++)
 			var_dims[j] = json_object_extarr_dim(data_obj, j);
 
-		TIO_Call( TIO_Create_Variable(file_id, mesh_id, varname, &var_id, dtype_id, ndims_tio, var_dims, NULL),
-		          "Create variable failed\n");
-		TIO_Call( TIO_Write_Variable(file_id, var_id, dtype_id, buf),
-		          "Write variable failed\n");
+		TIO_Call( TIO_Create_Quant(file_id, mesh_id, varname, &var_id, dtype_id, tio_centering,
+								TIO_GHOSTS_NONE, TIO_FALSE, "qunits"),
+					"Create Var Quant Failed\n");
 
-		TIO_Call( TIO_Close_Variable(file_id, var_id),
-		          "Close variable failed\n");
+		TIO_Call( TIO_Write_QuadQuant_Chunk(file_id, var_id, (TIO_Size_t)0, TIO_XFER_INDEPENDENT,
+											dtype_id, buf, (void*)TIO_NULL),
+					"Write Quad Quant Var Failed\n");
+		TIO_Call( TIO_Close_Quant(file_id, var_id),
+					"Close Quant Failed\n");
+		
 	}
 	TIO_Call( TIO_Close_Mesh(file_id, mesh_id),
 		"Close Mesh failed\n");
@@ -723,17 +728,6 @@ static void write_quad_mesh_whole(
 
 }
 
-static void interupt()
-{
-    int k = 0;
-    char hostname[256];
-    gethostname(hostname, sizeof(hostname));
-    printf("PID %d on %s ready for attach\n", getpid(), hostname);
-    fflush(stdout);
-    while (0 == k)
-        sleep(5);
-}
-
 static void write_ucd_mesh_whole(
 	TIO_File_t file_id, 
 	TIO_Object_t state_id,
@@ -748,9 +742,6 @@ static void write_ucd_mesh_whole(
 	TIO_File_t dims[3];
 	int nnodes = 1, nzones = 1;
 	TIO_Size_t nconnectivity = 1;
-
-
-	//interupt();
 
 	int ndims = json_object_path_get_int(main_obj, "clargs/part_dim");
 	json_object *global_log_dims_array = json_object_path_get_array(main_obj, "problem/global/LogDims");
