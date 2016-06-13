@@ -15,6 +15,8 @@
 #include <hdf5.h>
 #include <typhonio.h>
 
+#include <unistd.h>
+
 
 /* Disable debugging messages */
 
@@ -139,12 +141,91 @@ static void CloseTyphonIOFile(
 	          "File Close Failed\n");
 }
 
-static void write_mesh_part(
-    TIO_File_t file_id,
-    TIO_Object_t state_id,
-    json_object *part_obj
+static void write_quad_mesh_part(
+	TIO_File_t file_id,
+	TIO_Object_t state_id,
+	json_object *part_obj,
+	TIO_Mesh_t tio_mesh_type
 )
 {
+	TIO_Object_t mesh_id;
+	json_object *coordobj;
+	void const *coords[3];
+	int ndims = JsonGetInt(part_obj, "Mesh/GeomDim");
+	int dims[3] = {1,1,1};
+	int dimsz[3] = {1,1,1};
+
+	dims[0] = JsonGetInt(part_obj, "Mesh/LogDims", 0);
+
+	if (tio_mesh_type == TIO_MESH_QUAD_COLINEAR)
+	{
+		coordobj = JsonGetObj(part_obj, "Mesh/Coords/XAxisCoords"); // Rect Mesh
+	}
+	else
+	{
+		coordobj = JsonGetObj(part_obj, "Mesh/Coords/XCoords");	// Curv Mesh
+	}
+
+	coords[0] = json_object_extarr_data(coordobj);
+
+
+	if (ndims > 1)
+	{
+		dims[1] = JsonGetInt(part_obj, "Mesh/LogDims", 1);
+
+		if (tio_mesh_type == TIO_MESH_QUAD_COLINEAR)
+		{
+			coordobj = JsonGetObj(part_obj, "Mesh/Coords/YAxisCoords");
+		} 
+		else
+		{
+			coordobj = JsonGetObj(part_obj, "Mesh/Coords/YCoords");
+		}
+		coords[1] = json_object_extarr_data(coordobj);
+	}
+	if (ndims > 2)
+	{
+		dims[2] = JsonGetInt(part_obj, "Mesh/LogDims", 2);
+
+		if (tio_mesh_type == TIO_MESH_QUAD_COLINEAR)
+		{
+			coordobj = JsonGetObj(part_obj, "Mesh/Coords/ZAxisCoords");
+		} 
+		else
+		{
+			coordobj = JsonGetObj(part_obj, "Mesh/Coords/ZCoords");
+		}
+		coords[2] = json_object_extarr_data(coordobj);
+	}
+
+	TIO_Call( TIO_Create_Mesh(file_id, state_id, "mesh", &mesh_id, tio_mesh_type, 
+							TIO_COORD_CARTESIAN, TIO_FALSE, "mesh_group", (TIO_Size_t)1,
+							TIO_DATATYPE_NULL, TIO_DOUBLE, (TIO_Dims_t)ndims,
+							(TIO_Size_t)dims[0], (TIO_Size_t)dims[1], (TIO_Size_t)dims[2],
+							TIO_GHOSTS_NONE, (TIO_Size_t)1,
+							NULL, NULL, NULL,
+			                NULL, NULL, NULL),
+						"Create Mesh Failed\n");
+
+	if (tio_mesh_type == TIO_MESH_QUAD_COLINEAR){
+		TIO_Call( TIO_Set_Quad_Chunk(file_id, mesh_id, (TIO_Size_t)0, (TIO_Dims_t)ndims,
+							0, dims[0]-1, 0, dims[1]-1, 0, dims[2]-1,
+							0, 0),
+			"Set Quad Mesh Chunk Failed");
+		TIO_Call( TIO_Write_QuadMesh_All(file_id, mesh_id, TIO_DOUBLE, coords[0], coords[1], coords[2]),
+					"Write Mesh Coords failed\n");
+	} 
+	else 
+	{
+		TIO_Call( TIO_Set_Quad_Chunk(file_id, mesh_id, (TIO_Size_t)0, (TIO_Dims_t)ndims,
+							0, dims[0]-1, 0, dims[1]-1, 0, dims[2]-1,
+							0, 0),
+			"Set Quad Mesh Chunk Failed");
+		TIO_Call( TIO_Write_QuadMesh_Chunk(file_id, mesh_id, 0, TIO_XFER_INDEPENDENT, 
+											TIO_DOUBLE, coords[0], coords[1], coords[2]),
+					"Write Non-Colinear Mesh Coords failed\n");
+	}
+
 	TIO_Object_t variable_id;
 	json_object *vars_array = json_object_path_get_array(part_obj, "Vars");
 
@@ -152,10 +233,12 @@ static void write_mesh_part(
 	{
 		int j;
 		TIO_Size_t var_dims[3];
-		TIO_Object_t fspace_id, ds_id, var_id;
+		TIO_Object_t var_id;
 		json_object *var_obj = json_object_array_get_idx(vars_array, i);
 		json_object *data_obj = json_object_path_get_extarr(var_obj, "data");
 		char const *varname = json_object_path_get_string(var_obj, "name");
+		char *centering = strdup(json_object_path_get_string(var_obj, "centering"));
+		TIO_Centre_t tio_centering = strcmp(centering, "zone") ? TIO_CENTRE_NODE : TIO_CENTRE_CELL;
 		int ndims = json_object_extarr_ndims(data_obj);
 		void const *buf = json_object_extarr_data(data_obj);
 
@@ -167,15 +250,209 @@ static void write_mesh_part(
 		for (j = 0; j < ndims; j++)
 			var_dims[j] = json_object_extarr_dim(data_obj, j);
 
-		TIO_Call( TIO_Create_Variable(file_id, state_id, varname, &var_id, dtype_id, ndims_tio, var_dims, NULL),
-		          "Create variable failed\n");
-		TIO_Call( TIO_Write_Variable(file_id, var_id, dtype_id, buf),
-		          "Write variable failed\n");
+		TIO_Call( TIO_Create_Quant(file_id, mesh_id, varname, &var_id, dtype_id, tio_centering,
+								TIO_GHOSTS_NONE, TIO_FALSE, "qunits"),
+					"Create Var Quant Failed\n");
 
-		TIO_Call( TIO_Close_Variable(file_id, var_id),
-		          "Close variable failed\n");
+		TIO_Call( TIO_Write_QuadQuant_Chunk(file_id, var_id, (TIO_Size_t)0, TIO_XFER_INDEPENDENT,
+											dtype_id, buf, (void*)TIO_NULL),
+					"Write Quad Quant Var Failed\n");
+		TIO_Call( TIO_Close_Quant(file_id, var_id),
+					"Close Quant Failed\n");
+
 	}
+	TIO_Call( TIO_Close_Mesh(file_id, mesh_id),
+		"Close Mesh failed\n");
 
+}
+
+static void write_ucdzoo_mesh_part(
+	TIO_File_t file_id,
+	TIO_Object_t state_id,
+	json_object *part_obj,
+	char const *topo_name
+)
+{
+	TIO_Object_t mesh_id;
+	json_object *coordobj, *topoobj;
+	char const *coordnames[] = {"X", "Y", "Z"};
+	void const *coords[3];
+	int ndims = JsonGetInt(part_obj, "Mesh/GeomDim");
+	int nnodes = 1, nzones = 1;
+	int dims[3] = {1,1,1};
+	int dimsz[3] = {1,1,1};
+
+	coordobj = JsonGetObj(part_obj, "Mesh/Coords/XCoords");
+    coords[0] = json_object_extarr_data(coordobj);
+    dims[0] = JsonGetInt(part_obj, "Mesh/LogDims", 0);
+    dimsz[0] = dims[0]-1;
+    nnodes *= dims[0];
+    nzones *= dimsz[0];
+    if (ndims > 1)
+    {
+        coordobj = JsonGetObj(part_obj, "Mesh/Coords/YCoords");
+        coords[1] = json_object_extarr_data(coordobj);
+        dims[1] = JsonGetInt(part_obj, "Mesh/LogDims", 1);
+        dimsz[1] = dims[1]-1;
+        nnodes *= dims[1];
+        nzones *= dimsz[1];
+    }
+    if (ndims > 2)
+    {
+        coordobj = JsonGetObj(part_obj, "Mesh/Coords/ZCoords");
+        coords[2] = json_object_extarr_data(coordobj);
+        dims[2] = JsonGetInt(part_obj, "Mesh/LogDims", 2);
+        dimsz[2] = dims[2]-1;
+        nnodes *= dims[2];
+        nzones *= dimsz[2];
+    }
+
+    if (ndims == 1 || !strcmp(topo_name, "ucdzoo"))
+    /* UCDZOO */
+    {
+        json_object *topoobj = JsonGetObj(part_obj, "Mesh/Topology");
+        json_object *nlobj = JsonGetObj(topoobj, "Nodelist");
+        void const *nodelist = (void const*) json_object_extarr_data(nlobj);
+        int lnodelist = json_object_extarr_nvals(nlobj);
+        TIO_Shape_t shapetype; 
+        int shapesize;
+        int shapecnt = nzones;
+        int ncells = nzones;
+
+        if (!strcmp(JsonGetStr(topoobj, "ElemType"), "Beam2"))
+        {
+            shapesize = 2;
+            shapetype = TIO_SHAPE_BAR2;
+        }
+        else if (!strcmp(JsonGetStr(topoobj, "ElemType"), "Quad4"))
+        {
+            shapesize = 4;
+            shapetype = TIO_SHAPE_QUAD4;
+        }
+        else if (!strcmp(JsonGetStr(topoobj, "ElemType"), "Hex8"))
+        {
+            shapesize = 8;
+            shapetype = TIO_SHAPE_HEX8;
+        }
+
+ 		TIO_Size_t nshapes = 1;
+ 		TIO_Size_t nconnectivity = 0;//ncells*shapesize;
+
+ 		 /* For unstructured: n1=nnodes, n2=ncells, n3=nshapes, n4=nconnectivity */
+
+        TIO_Call( TIO_Create_Mesh(file_id, state_id, "mesh", &mesh_id, TIO_MESH_UNSTRUCT,
+        						TIO_COORD_CARTESIAN, TIO_FALSE, "mesh_group", (TIO_Size_t)1,
+        						TIO_INT, TIO_DOUBLE, (TIO_Dims_t)ndims, 
+        						(TIO_Size_t)nnodes, (TIO_Size_t)ncells, nshapes,
+								nconnectivity, (TIO_Size_t)1,
+								NULL, NULL, NULL,
+				                NULL, NULL, NULL),
+							"Create Mesh Failed\n");
+
+        TIO_Call( TIO_Set_Unstr_Chunk(file_id, mesh_id, (TIO_Size_t)0, (TIO_Dims_t)ndims, (TIO_Size_t)nnodes,
+        						ncells, nshapes, nconnectivity, 0, 0, 0, 0, 0, 0),
+        					"Set UCDZOO Mesh Chunk Failed\n");
+
+        TIO_Call( TIO_Write_UnstrMesh_Chunk(file_id, mesh_id, (TIO_Size_t)0, TIO_XFER_INDEPENDENT,
+        								TIO_INT, TIO_DOUBLE, nodelist, nodelist, &shapetype, 
+        								&ncells, (const void*)NULL, coords[0], coords[1], coords[2]),
+        					"Write unstructured Mesh Failed\n");
+    }
+    else if (!strcmp(topo_name, "arbitrary"))
+    /* ARBITRARY */
+    {
+ 		json_object *topoobj = JsonGetObj(part_obj, "Mesh/Topology");
+        json_object *nlobj = JsonGetObj(topoobj, "Nodelist");
+        void const *nodelist = (void const*) json_object_extarr_data(nlobj);
+        json_object *ncobj = JsonGetObj(topoobj, "NodeCounts");
+        int const *nodecnt = (int const *) json_object_extarr_data(ncobj);
+        int nfaces = json_object_extarr_nvals(ncobj);
+        json_object *flobj = JsonGetObj(topoobj, "Facelist");
+        int const *facelist = (int const *) json_object_extarr_data(flobj);
+        int lfacelist = json_object_extarr_nvals(flobj);
+        json_object *fcobj = JsonGetObj(topoobj, "FaceCounts");
+        int const *facecnt = (int const *) json_object_extarr_data(fcobj);
+
+        int ncells = nzones;
+        TIO_Size_t nshapes = MACSIO_MAIN_Size;
+        TIO_Size_t nconnectivity = 0;//ncells*shapesize;
+        TIO_Shape_t *shapetype = (TIO_Shape_t*)malloc(nshapes * sizeof(TIO_Shape_t));
+        for (int s = 0; s<nshapes; s++){
+        	shapetype[s] = (TIO_Shape_t)4; // Abribtrary polygon with 4 nodes
+        }  
+
+    	TIO_Call( TIO_Create_Mesh(file_id, state_id, "mesh", &mesh_id, TIO_MESH_UNSTRUCT,
+    							TIO_COORD_CARTESIAN, TIO_FALSE, "mesh_group", (TIO_Size_t)1,
+    							TIO_INT, TIO_DOUBLE, (TIO_Dims_t)ndims,
+    							(TIO_Size_t)nnodes, (TIO_Size_t)ncells, nshapes,
+    							nconnectivity, (TIO_Size_t)1,
+    							NULL, NULL, NULL,
+    							NULL, NULL, NULL),
+    						"Create Arbitrary Unstructured Mesh Failed\n");
+
+    	TIO_Call( TIO_Set_Unstr_Chunk(file_id, mesh_id, (TIO_Size_t)0, (TIO_Dims_t)ndims, (TIO_Size_t)nnodes,
+    							ncells, nshapes, nconnectivity, 0, 0, 0, 0, 0, 0),
+    						"Set Arbitrary Mesh Chunk Failed");
+
+    	 TIO_Call( TIO_Write_UnstrMesh_Chunk(file_id, mesh_id, (TIO_Size_t)0, TIO_XFER_INDEPENDENT,
+        								TIO_INT, TIO_DOUBLE, nodelist, nodelist, shapetype, 
+        								&ncells, (const void*)NULL, coords[0], coords[1], coords[2]),
+        					"Write unstructured Mesh Failed\n");
+    	 free(shapetype);
+    }	
+
+	TIO_Object_t variable_id;
+	json_object *vars_array = json_object_path_get_array(part_obj, "Vars");
+
+	for (int i = 0; i < json_object_array_length(vars_array); i++)
+	{
+		int j;
+		TIO_Size_t var_dims[3];
+		TIO_Object_t var_id;
+		json_object *var_obj = json_object_array_get_idx(vars_array, i);
+		json_object *data_obj = json_object_path_get_extarr(var_obj, "data");
+		char const *varname = json_object_path_get_string(var_obj, "name");
+		char *centering = strdup(json_object_path_get_string(var_obj, "centering"));
+		TIO_Centre_t tio_centering = strcmp(centering, "zone") ? TIO_CENTRE_NODE : TIO_CENTRE_CELL;
+		int ndims = json_object_extarr_ndims(data_obj);
+		void const *buf = json_object_extarr_data(data_obj);
+
+		TIO_Data_t dtype_id = json_object_extarr_type(data_obj) == json_extarr_type_flt64 ?
+		                      TIO_DOUBLE : TIO_INT;
+
+		for (j = 0; j < ndims; j++)
+			var_dims[j] = json_object_extarr_dim(data_obj, j);
+
+		TIO_Call( TIO_Create_Quant(file_id, mesh_id, varname, &var_id, dtype_id, tio_centering,
+								TIO_GHOSTS_NONE, TIO_FALSE, "quints"),
+						"Unstructured Quant Create Failed\n");
+		TIO_Call( TIO_Write_UnstrQuant_Chunk(file_id, var_id, (TIO_Size_t)0, TIO_XFER_INDEPENDENT,
+										dtype_id, buf, (void*)TIO_NULL),
+						"Write Unstructured Quant Chunk Failed\n");
+		TIO_Call( TIO_Close_Quant(file_id, var_id),
+						"Close Unstructured Quant Failed\n");
+	}	    
+
+
+    TIO_Call( TIO_Close_Mesh(file_id, mesh_id),
+				"Close Mesh Failed\n");
+	
+}
+
+static void write_mesh_part(
+    TIO_File_t file_id,
+    TIO_Object_t state_id,
+    json_object *part_obj
+)
+{
+    if (!strcmp(JsonGetStr(part_obj, "Mesh/MeshType"), "rectilinear"))
+        write_quad_mesh_part(file_id, state_id, part_obj, TIO_MESH_QUAD_COLINEAR);
+    else if (!strcmp(JsonGetStr(part_obj, "Mesh/MeshType"), "curvilinear"))
+        write_quad_mesh_part(file_id, state_id, part_obj, TIO_MESH_QUAD_NONCOLINEAR);
+    else if (!strcmp(JsonGetStr(part_obj, "Mesh/MeshType"), "ucdzoo"))
+        write_ucdzoo_mesh_part(file_id, state_id, part_obj, "ucdzoo");
+    else if (!strcmp(JsonGetStr(part_obj, "Mesh/MeshType"), "arbitrary"))
+        write_ucdzoo_mesh_part(file_id, state_id, part_obj, "arbitrary");
 }
 
 typedef struct _user_data {
@@ -205,12 +482,12 @@ static void main_dump_mif(json_object *main_obj, int numFiles, int dumpn, double
 	rank = json_object_path_get_int(main_obj, "parallel/mpi_rank");
 	size = json_object_path_get_int(main_obj, "parallel/mpi_size");
 
-	/* Construct name for the silo file */
+	/* Construct name for the typhonio file */
 	sprintf(fileName, "%s_typhonio_%05d_%03d.%s",
 	        json_object_path_get_string(main_obj, "clargs/filebase"),
 	        MACSIO_MIF_RankOfGroup(bat, rank),
 	        dumpn,
-	        json_object_path_get_string(main_obj, "clargs/fileext"));
+	        "h5");//json_object_path_get_string(main_obj, "clargs/fileext"));
 
 	tioFile_ptr = (TIO_t *) MACSIO_MIF_WaitForBaton(bat, fileName, 0);
 	tioFile = *tioFile_ptr;
@@ -246,71 +523,29 @@ static void main_dump_mif(json_object *main_obj, int numFiles, int dumpn, double
 
 }
 
-void reverse_array(TIO_Size_t *pointer, int n)
+static void write_quad_mesh_whole(
+	TIO_File_t file_id, 
+	TIO_Object_t state_id,
+	json_object *main_obj,
+	TIO_Mesh_t mesh_type)
 {
-	TIO_Size_t *s;
-	int c, d;
-
-	s = (TIO_Size_t*)malloc(sizeof(TIO_Size_t) * n);
-
-	if ( s == NULL )
-		exit(EXIT_FAILURE);
-
-	for ( c = n - 1, d = 0 ; c >= 0 ; c--, d++ )
-		*(s + d) = *(pointer + c);
-
-	for ( c = 0 ; c < n ; c++ )
-		*(pointer + c) = *(s + c);
-
-	free(s);
-}
-
-static void main_dump_sif(json_object *main_obj, int dumpn, double dumpt)
-{
-#ifdef HAVE_MPI
+	TIO_Object_t mesh_id;
+	TIO_Object_t object_id;
 	int ndims;
 	int i, v, p;
-	char const *mesh_type = json_object_path_get_string(main_obj, "clargs/part_type");
-	char fileName[256];
 	int use_part_count;
-	TIO_Object_t state_id, variable_id;
-	char *state_name = "state0";
 	const TIO_Xfer_t TIO_XFER = no_collective ? TIO_XFER_INDEPENDENT : TIO_XFER_COLLECTIVE;
 
-	TIO_File_t tiofile_id;
-	TIO_Size_t global_log_dims_nodal[3];
-	TIO_Size_t global_log_dims_zonal[3];
-
-	MPI_Info mpiInfo = MPI_INFO_NULL;
-
-	/* Construct name for the HDF5 file */
-	sprintf(fileName, "%s_typhonio_%03d.%s",
-	        json_object_path_get_string(main_obj, "clargs/filebase"),
-	        dumpn,
-	        "h5"); //json_object_path_get_string(main_obj, "clargs/fileext"));
-
-	char *date = (char*)getDate();
-
-	TIO_Call( TIO_Create(fileName, &tiofile_id, TIO_ACC_REPLACE, "MACSio",
-	                     "0.9", date, fileName, MACSIO_MAIN_Comm, MPI_INFO_NULL, MACSIO_MAIN_Rank),
-	          "File Creation Failed\n");
-
-	TIO_Call( TIO_Create_State(tiofile_id, state_name, &state_id, 1, (TIO_Time_t)0.0, "us"),
-	          "State Create Failed\n");
+	TIO_Size_t dims[3];
 
 	ndims = json_object_path_get_int(main_obj, "clargs/part_dim");
-	json_object *global_log_dims_array =
-	    json_object_path_get_array(main_obj, "problem/global/LogDims");
-	json_object *global_parts_log_dims_array =
-	    json_object_path_get_array(main_obj, "problem/global/PartsLogDims");
-	/* Note that global zonal array is smaller in each dimension by one *ON*EACH*BLOCK*
-	   in the associated dimension. */
+	json_object *global_log_dims_array = json_object_path_get_array(main_obj, "problem/global/LogDims");
+	json_object *global_parts_log_dims_array = json_object_path_get_array(main_obj, "problem/global/PartsLogDims");
+	
+
 	for (i = 0; i < ndims; i++)
 	{
-		int parts_log_dims_val = JsonGetInt(global_parts_log_dims_array, "", i);
-		global_log_dims_nodal[ndims - 1 - i] = (TIO_Size_t) JsonGetInt(global_log_dims_array, "", i);
-		global_log_dims_zonal[ndims - 1 - i] = global_log_dims_nodal[ndims - 1 - i] -
-		                                       JsonGetInt(global_parts_log_dims_array, "", i);
+		dims[i] = (TIO_Size_t) JsonGetInt(global_log_dims_array, "", i);
 	}
 
 	/* Get the list of vars on the first part as a guide to loop over vars */
@@ -318,8 +553,6 @@ static void main_dump_sif(json_object *main_obj, int dumpn, double dumpt)
 	json_object *first_part_obj = json_object_array_get_idx(part_array, 0);
 	json_object *first_part_vars_array = json_object_path_get_array(first_part_obj, "Vars");
 
-	TIO_Object_t mesh_id;
-	TIO_Object_t object_id;
 
 	/* Loop over vars and then over parts */
 	/* currently assumes all vars exist on all ranks. but not all parts */
@@ -332,16 +565,14 @@ static void main_dump_sif(json_object *main_obj, int dumpn, double dumpt)
 		TIO_Data_t dtype_id;
 
 		//MESH
-		TIO_Size_t *global_log_dims = global_log_dims_nodal;
 		TIO_Dims_t ndims_tio = (TIO_Dims_t)ndims;
-		reverse_array(global_log_dims, ndims);
 
-		if (v == -1) {
-			TIO_Call( TIO_Create_Mesh(tiofile_id, state_id, "mesh", &mesh_id, TIO_MESH_QUAD_COLINEAR,
+		if (v == -1) { 
+			TIO_Call( TIO_Create_Mesh(file_id, state_id, "mesh", &mesh_id, mesh_type,
 			                          TIO_COORD_CARTESIAN, TIO_FALSE, "mesh_group", (TIO_Size_t)1,
 			                          TIO_DATATYPE_NULL, TIO_DOUBLE, ndims_tio,
-			                          (TIO_Size_t)global_log_dims[0], (TIO_Size_t)global_log_dims[1], (TIO_Size_t)global_log_dims[2],
-			                          TIO_NULL, (TIO_Size_t)MACSIO_MAIN_Size,
+			                          dims[0], dims[1], dims[2],
+			                          TIO_GHOSTS_NONE, (TIO_Size_t)MACSIO_MAIN_Size,
 			                          NULL, NULL, NULL,
 			                          NULL, NULL, NULL),
 
@@ -353,9 +584,11 @@ static void main_dump_sif(json_object *main_obj, int dumpn, double dumpt)
 			dtype_id = json_object_extarr_type(dataobj) == json_extarr_type_flt64 ? TIO_DOUBLE : TIO_INT;
 			TIO_Centre_t tio_centering = strcmp(centering, "zone") ? TIO_CENTRE_NODE : TIO_CENTRE_CELL;
 
-			TIO_Call( TIO_Create_Quant(tiofile_id, mesh_id, varName, &object_id, dtype_id, tio_centering,
+			TIO_Call( TIO_Create_Quant(file_id, mesh_id, varName, &object_id, dtype_id, tio_centering,
 										TIO_GHOSTS_NONE, TIO_FALSE, "qunits"),
 					"Quant Create Failed\n");
+
+			free(centering);
 		}
 
 		/* Loop to make write calls for this var for each part on this rank */
@@ -376,51 +609,30 @@ static void main_dump_sif(json_object *main_obj, int dumpn, double dumpt)
 
 			if (part_obj)
 			{
-				//Both
-				int i;
-
 				if (v == -1) {
 					//Mesh
-					TIO_Size_t starts[3], counts[3];
 					json_object *mesh_obj = json_object_path_get_object(part_obj, "Mesh");
 					json_object *global_log_origin_array = json_object_path_get_array(part_obj, "GlobalLogOrigin");
 					json_object *global_log_indices_array = json_object_path_get_array(part_obj, "GlobalLogIndices");
 					json_object *mesh_dims_array = json_object_path_get_array(mesh_obj, "LogDims");
-
+					int local_mesh_dims[3];
+					TIO_Size_t local_chunk_indices[6] = {0,0,0,0,0,0};	/* local_chunk_indices [il, ih, jl, jh, kl, kh] */
+					
 					for (i = 0; i < ndims; i++)
 					{
-						starts[ndims - 1 - i] =
-						    json_object_get_int(json_object_array_get_idx(global_log_origin_array, i));
-						counts[ndims - 1 - i] =
-						    json_object_get_int(json_object_array_get_idx(mesh_dims_array, i));
-						if (!strcmp(centering, "zone") || v == -1)
-						{
-							counts[ndims - 1 - i]--;
-							starts[ndims - 1 - i] -=
-							    json_object_get_int(json_object_array_get_idx(global_log_indices_array, i));
-						}
-					}
+						local_mesh_dims[i] = json_object_get_int(json_object_array_get_idx(mesh_dims_array, i));
+						int start = json_object_get_int(json_object_array_get_idx(global_log_origin_array, i));
+						int count = json_object_get_int(json_object_array_get_idx(mesh_dims_array, i)) - 1;
 
-					TIO_Size_t local_chunk_indices[6] = {0,0,0,0,0,0};	/* local_chunk_indices [il, ih, jl, jh, kl, kh] */
-
-					// Sets the upper and lower index in each dimension for the current ranks chunk
-					local_chunk_indices[0] = starts[0];
-					local_chunk_indices[1] = starts[0] + counts[0];
-
-					if (ndims > 1) {
-						local_chunk_indices[2] = starts[1];
-						local_chunk_indices[3] = starts[1] + counts[1];
-						if (ndims > 2) {
-							local_chunk_indices[4] = starts[2];
-							local_chunk_indices[5] = starts[2] + counts[2];
-						}
+						local_chunk_indices[i*2] = start;
+						local_chunk_indices[(i*2)+1] = start + count;
 					}
 									
 					TIO_Size_t chunk_indices[MACSIO_MAIN_Size][6];
 					MPI_Allgather(local_chunk_indices, 6, MPI_DOUBLE, chunk_indices, 6, MPI_DOUBLE, MACSIO_MAIN_Comm);
 
 					for (int k=0; k<MACSIO_MAIN_Size; k++){
-						TIO_Call( TIO_Set_Quad_Chunk(tiofile_id, mesh_id, k, ndims_tio,
+						TIO_Call( TIO_Set_Quad_Chunk(file_id, mesh_id, k, ndims_tio,
 												chunk_indices[k][0], chunk_indices[k][1],
 												chunk_indices[k][2], chunk_indices[k][3],
 												chunk_indices[k][4], chunk_indices[k][5],
@@ -430,35 +642,50 @@ static void main_dump_sif(json_object *main_obj, int dumpn, double dumpt)
 
 					json_object *coords = json_object_path_get_object(mesh_obj, "Coords");
 
-					x_coord = json_object_extarr_data(json_object_path_get_extarr(coords, "XAxisCoords"));
-					y_coord = json_object_extarr_data(json_object_path_get_extarr(coords, "YAxisCoords"));
-					z_coord = json_object_extarr_data(json_object_path_get_extarr(coords, "ZAxisCoords"));
+					int coord_array_size[] = {0, 0, 0};
+					
+					if (mesh_type == TIO_MESH_QUAD_COLINEAR){
+						x_coord = json_object_extarr_data(json_object_path_get_extarr(coords, "XAxisCoords"));
+						y_coord = json_object_extarr_data(json_object_path_get_extarr(coords, "YAxisCoords"));
+						z_coord = json_object_extarr_data(json_object_path_get_extarr(coords, "ZAxisCoords"));	
+						coord_array_size[0] = dims[0];
+						coord_array_size[1] = dims[1];
+						coord_array_size[2] = dims[2];	
 
-					if (MACSIO_MAIN_Rank == 0){
-						x_coord_root = malloc(global_log_dims[0] * sizeof(double));
-						y_coord_root = malloc(global_log_dims[1] * sizeof(double));
-						z_coord_root = malloc(global_log_dims[2] * sizeof(double));
-					}
+						int parts = json_object_path_get_int(main_obj, "problem/global/TotalParts");;
 
-					json_object *bounds = json_object_path_get_array(mesh_obj, "Bounds");
+						if (MACSIO_MAIN_Rank == 0){
+							x_coord_root = malloc(coord_array_size[0] * sizeof(double));
+							if (ndims > 1) y_coord_root = malloc(coord_array_size[1] * sizeof(double));
+							if (ndims > 2) z_coord_root = malloc(coord_array_size[2] * sizeof(double));
+						}
 
-					int color = (JsonGetInt(bounds,"",1) == 0 && JsonGetInt(bounds,"",2) ==0) ? 1: MPI_UNDEFINED;
-					MPI_Comm comm;
-					MPI_Comm_split(MACSIO_MAIN_Comm, color, MACSIO_MAIN_Rank, &comm);
-					if (color == 1){
-					MPI_Gather(x_coord, 100, MPI_DOUBLE, x_coord_root, 100, MPI_DOUBLE, 0, comm);
-					}
-					if (ndims > 1){
-						color = (JsonGetInt(bounds, "", 0)==0 && JsonGetInt(bounds,"",2)==0) ? 1: MPI_UNDEFINED;
+						json_object *bounds = json_object_path_get_array(mesh_obj, "Bounds");
+
+						int color = (JsonGetInt(bounds,"",1) == 0 && JsonGetInt(bounds,"",2) ==0) ? 1: MPI_UNDEFINED;
+						MPI_Comm comm;
 						MPI_Comm_split(MACSIO_MAIN_Comm, color, MACSIO_MAIN_Rank, &comm);
-						if (color == 1)
-						MPI_Gather(y_coord, 100, MPI_DOUBLE, y_coord_root, 100, MPI_DOUBLE, 0, comm);
-					}
-					if (ndims > 2){
-						color = (JsonGetInt(bounds, "", 0)==0 && JsonGetInt(bounds,"",1)==0) ? 1: MPI_UNDEFINED;
-						MPI_Comm_split(MACSIO_MAIN_Comm, color, MACSIO_MAIN_Rank, &comm);
-						if (color == 1)
-						MPI_Gather(z_coord, 100, MPI_DOUBLE, z_coord_root, 100, MPI_DOUBLE, 0, comm);
+						if (color == 1){
+						MPI_Gather(x_coord, local_mesh_dims[0], MPI_DOUBLE, x_coord_root, local_mesh_dims[0], MPI_DOUBLE, 0, comm);
+						}
+						if (ndims > 1){
+							color = (JsonGetInt(bounds, "", 0)==0 && JsonGetInt(bounds,"",2)==0) ? 1: MPI_UNDEFINED;
+							MPI_Comm_split(MACSIO_MAIN_Comm, color, MACSIO_MAIN_Rank, &comm);
+							if (color == 1){
+							MPI_Gather(y_coord, local_mesh_dims[1], MPI_DOUBLE, y_coord_root, local_mesh_dims[1], MPI_DOUBLE, 0, comm);
+							}					
+						}
+						if (ndims > 2){
+							color = (JsonGetInt(bounds, "", 0)==0 && JsonGetInt(bounds,"",1)==0) ? 1: MPI_UNDEFINED;
+							MPI_Comm_split(MACSIO_MAIN_Comm, color, MACSIO_MAIN_Rank, &comm);
+							if (color == 1)
+							MPI_Gather(z_coord, local_mesh_dims[2], MPI_DOUBLE, z_coord_root, local_mesh_dims[2], MPI_DOUBLE, 0, comm);
+
+						}
+					} else {
+						x_coord = json_object_extarr_data(json_object_path_get_extarr(coords, "XCoords"));
+						y_coord = json_object_extarr_data(json_object_path_get_extarr(coords, "YCoords"));
+						z_coord = json_object_extarr_data(json_object_path_get_extarr(coords, "ZCoords"));
 					}
 
 				} else {
@@ -471,15 +698,17 @@ static void main_dump_sif(json_object *main_obj, int dumpn, double dumpt)
 				}
 			}
 
-			if (v == -1) {
+			if (v == -1) { 
 
-				/* Gather coordinates on root process */ 
-
-
-				if (MACSIO_MAIN_Rank == 0){
-
-				TIO_Call( TIO_Write_QuadMesh_All(tiofile_id, mesh_id, TIO_DOUBLE, x_coord_root, y_coord_root, z_coord_root),
-					"Write Quad Mesh All Failed\n");
+				if (mesh_type == TIO_MESH_QUAD_COLINEAR){
+					if (MACSIO_MAIN_Rank == 0){					
+						TIO_Call( TIO_Write_QuadMesh_All(file_id, mesh_id, TIO_DOUBLE, x_coord_root, y_coord_root, z_coord_root),
+							"Write Quad Mesh All Failed\n");
+					}
+				} else {
+					TIO_Call( TIO_Write_QuadMesh_Chunk(file_id, mesh_id, MACSIO_MAIN_Rank, TIO_XFER,
+														TIO_DOUBLE, x_coord, y_coord, z_coord),
+								"Write Non-Colinear Mesh Coords failed\n");
 				}
 
 				free(x_coord_root);
@@ -487,21 +716,349 @@ static void main_dump_sif(json_object *main_obj, int dumpn, double dumpt)
 			// free(z_coord_root);
 	    
 			} else {				
-				TIO_Call( TIO_Write_QuadQuant_Chunk(tiofile_id, object_id, MACSIO_MAIN_Rank, 
+				TIO_Call( TIO_Write_QuadQuant_Chunk(file_id, object_id, MACSIO_MAIN_Rank, 
 												TIO_XFER, dtype_id, buf, (void*)TIO_NULL),
 					"Write Quad Quant Chunk Failed\n");
 
-				TIO_Call( TIO_Close_Quant(tiofile_id, object_id),
+				TIO_Call( TIO_Close_Quant(file_id, object_id),
 					"Close Quant Failed\n");
+			}
+
+			free(x_coord_root);
+			free(y_coord_root);
+			free(z_coord_root);
+		}
+	}
+
+	TIO_Call( TIO_Close_Mesh(file_id, mesh_id),
+          "Close Mesh Failed\n");
+
+}
+
+static void write_ucd_mesh_whole(
+	TIO_File_t file_id, 
+	TIO_Object_t state_id,
+	json_object *main_obj,
+	char *mesh_type)
+{
+	TIO_Object_t mesh_id;
+	TIO_Object_t object_id;
+	int i, v, p;
+	int use_part_count;
+	const TIO_Xfer_t TIO_XFER = no_collective ? TIO_XFER_INDEPENDENT : TIO_XFER_COLLECTIVE;
+	TIO_File_t dims[3];
+	int nnodes = 1, nzones = 1;
+	TIO_Size_t nconnectivity = 1;
+
+	int ndims = json_object_path_get_int(main_obj, "clargs/part_dim");
+	json_object *global_log_dims_array = json_object_path_get_array(main_obj, "problem/global/LogDims");
+	json_object *global_parts_log_dims_array = json_object_path_get_array(main_obj, "problem/global/PartsLogDims");
+
+	for (i = 0; i < ndims; i++)
+	{
+		dims[i] = (TIO_Size_t) JsonGetInt(global_log_dims_array, "", i);
+		nnodes *= dims[i];
+		nzones *= dims[i]-JsonGetInt(global_parts_log_dims_array,"", i);
+ 	}
+
+	/* Get the list of vars on the first part as a guide to loop over vars */
+	json_object *part_array = json_object_path_get_array(main_obj, "problem/parts");
+	json_object *first_part_obj = json_object_array_get_idx(part_array, 0);
+	json_object *first_part_vars_array = json_object_path_get_array(first_part_obj, "Vars");
+
+	/* Loop over vars and then over parts */
+	/* currently assumes all vars exist on all ranks. but not all parts */
+	for (v = -1; v < json_object_array_length(first_part_vars_array); v++) /* -1 start is for Mesh */
+	{
+		/* Inspect the first part's var object for name, datatype, etc. */
+		json_object *var_obj = json_object_array_get_idx(first_part_vars_array, v);
+
+		char *centering = (char*)malloc(sizeof(char)*5);
+		TIO_Data_t dtype_id;
+		int nshapes =  strcmp(mesh_type, "ucdzoo") ? MACSIO_MAIN_Size : 1;
+
+		if (v == -1){
+ 
+			char const *shape = JsonGetStr(first_part_obj, "Mesh/Topology/ElemType");
+
+			if (!strcmp(shape, "Beam2"))
+			{
+				nconnectivity = nzones * 2;
+			}
+			else if (!strcmp(shape, "Quad4"))
+			{
+				nconnectivity = nzones * 4;
+			}
+			else if (!strcmp(shape, "Hex8"))
+			{
+				nconnectivity = nzones * 8;
+			} 
+			else if (!strcmp(shape, "Arbitrary"))
+			{
+				nconnectivity = nzones * 4;
+			}
+
+			TIO_Call( TIO_Create_Mesh(file_id, state_id, "mesh", &mesh_id, TIO_MESH_UNSTRUCT,
+									TIO_COORD_CARTESIAN, TIO_FALSE, "mesh_group", (TIO_Size_t)1,
+									TIO_INT, TIO_DOUBLE, (TIO_Dims_t)ndims, 
+									(TIO_Size_t)nnodes, (TIO_Size_t)nzones, nshapes,//nzones,
+									nconnectivity, (TIO_Size_t)MACSIO_MAIN_Size,
+									NULL, NULL, NULL,
+									NULL, NULL, NULL),
+				"Mesh Create Failed\n");
+		} else {
+			char const *varName = json_object_path_get_string(var_obj, "name");
+			centering = strdup(json_object_path_get_string(var_obj, "centering"));
+			TIO_Centre_t tio_centering = strcmp(centering, "zone") ? TIO_CENTRE_NODE : TIO_CENTRE_CELL;
+			json_object *dataobj = json_object_path_get_extarr(var_obj, "data");
+			dtype_id = json_object_extarr_type(dataobj) == json_extarr_type_flt64 ? TIO_DOUBLE : TIO_INT;
+			
+			TIO_Call( TIO_Create_Quant(file_id, mesh_id, varName, &object_id, dtype_id, tio_centering,
+										TIO_GHOSTS_NONE, TIO_FALSE, "qunits"),
+					"Quant Create Failed\n");
+
+			free(centering);
+		}
+
+		use_part_count = (int) ceil(json_object_path_get_double(main_obj, "clargs/avg_num_parts"));
+		for (p = 0; p < use_part_count; p++)
+		{
+			json_object *part_obj = json_object_array_get_idx(part_array, p);
+			json_object *var_obj = 0;
+
+			void const *buf = 0;
+			void const *x_coord = 0;
+			void const *y_coord = 0;
+			void const *z_coord = 0;
+
+			if(part_obj)
+			{
+				if (v == -1){
+					json_object *mesh_obj = json_object_path_get_object(part_obj, "Mesh");
+					json_object *global_log_origin_array = json_object_path_get_array(part_obj, "GlobalLogOrigin");
+					json_object *global_log_indices_array = json_object_path_get_array(part_obj, "GlobalLogIndices");
+					json_object *mesh_dims_array = json_object_path_get_array(mesh_obj, "LogDims");
+					int local_mesh_dims[3] = {0, 0, 0};
+					int chunk_parameters[2] = {1, 1}; /* nnodes, ncells */
+
+					/* Unused currently */
+					TIO_Size_t nghost_nodes = TIO_GHOSTS_NONE;
+					TIO_Size_t nghost_cells = TIO_GHOSTS_NONE;
+					TIO_Size_t nghost_shapes = TIO_GHOSTS_NONE;
+					TIO_Size_t nghost_connectivity = TIO_GHOSTS_NONE;
+					TIO_Size_t nmixcell = 0;
+					TIO_Size_t nmixcomp = 0;
+
+					json_object *topoobj = JsonGetObj(part_obj, "Mesh/Topology");
+
+					int chunk_cells = 1;
+					int chunk_nodes = 1;
+
+					for (i = 0; i < ndims; i++)
+					{
+						local_mesh_dims[i] = json_object_get_int(json_object_array_get_idx(mesh_dims_array, i));
+						chunk_nodes *= local_mesh_dims[i]; // nnodes
+						chunk_cells *= (local_mesh_dims[i]-1); // nzones/ncells
+					}
+					
+					if (!strcmp(mesh_type, "ucdzoo"))
+					{
+						int shapesize;
+						TIO_Shape_t shapetype = TIO_SHAPE_NULL;
+						int ncells_per_shape = 9801;
+
+						if (ndims == 1 || !strcmp(mesh_type, "ucdzoo")){										     
+		        			 if (!strcmp(JsonGetStr(topoobj, "ElemType"), "Beam2"))
+					        {
+					            shapesize = 2;
+								shapetype = TIO_SHAPE_BAR2;				        		
+					        }
+					        else if (!strcmp(JsonGetStr(topoobj, "ElemType"), "Quad4"))
+					        {
+					            shapesize = 4;
+					           	shapetype = TIO_SHAPE_QUAD4;
+					        		
+					        }
+					        else if (!strcmp(JsonGetStr(topoobj, "ElemType"), "Hex8"))
+					        {
+					            shapesize = 8;
+								shapetype = TIO_SHAPE_HEX8;				        	
+					        }
+		        		}	
+
+						int *global_nodes = (int*)malloc(sizeof(int)*MACSIO_MAIN_Size);
+						int *global_cells = (int*)malloc(sizeof(int)*MACSIO_MAIN_Size);
+
+						MPI_Allgather(&chunk_nodes, 1, MPI_INT, global_nodes, 1, MPI_INT, MACSIO_MAIN_Comm);
+						MPI_Allgather(&chunk_cells, 1, MPI_INT, global_cells, 1, MPI_INT, MACSIO_MAIN_Comm);
+				
+						for (i=0; i<MACSIO_MAIN_Size; i++)
+						{
+							nconnectivity = global_cells[i] * shapesize; 
+							TIO_Call( TIO_Set_Unstr_Chunk(file_id, mesh_id, i, (TIO_Dims_t)ndims,
+														global_nodes[i], global_cells[i],
+														nshapes, nconnectivity,
+														nghost_nodes, nghost_cells,
+														nghost_shapes, nghost_connectivity,
+														nmixcell, nmixcomp),
+									"Set UCDZOO Mesh Chunk Failed\n");
+						}
+
+						json_object *coords = json_object_path_get_object(mesh_obj, "Coords");
+
+						x_coord = json_object_extarr_data(json_object_path_get_extarr(coords, "XCoords"));
+						y_coord = json_object_extarr_data(json_object_path_get_extarr(coords, "YCoords"));
+						z_coord = json_object_extarr_data(json_object_path_get_extarr(coords, "ZCoords"));
+
+						int chunkID = JsonGetInt(mesh_obj, "ChunkID");
+						void const *node_connectivity = (void const*) json_object_extarr_data(JsonGetObj(topoobj, "Nodelist"));
+						int *nodeIDs = (int*) malloc(sizeof(int) * chunk_nodes);
+						int *cellIDs = (int*) malloc(sizeof(int) * chunk_cells);
+
+						for (int k = 0; k < chunk_nodes; k++){
+							nodeIDs[k] = k + ((int)global_nodes[chunkID] * chunkID);
+						}
+
+						for (int cell = 0; cell < chunk_cells; cell++){
+							cellIDs[cell] = cell + ((int)global_cells[chunkID] * chunkID);
+						}
+
+						void const *node_ptr = nodeIDs;
+						void const *cell_ptr = cellIDs;
+
+						TIO_Call( TIO_Write_UnstrMesh_Chunk(file_id, mesh_id, (TIO_Size_t)MACSIO_MAIN_Rank, TIO_XFER, 
+													TIO_INT, TIO_DOUBLE, node_ptr, cell_ptr, &shapetype, 
+													&ncells_per_shape, node_connectivity, x_coord, y_coord, z_coord),
+									"Write Unstructured Mesh Failed\n");
+
+						free((void*)nodeIDs);
+						free((void*)cellIDs);
+					} else if (!strcmp(mesh_type, "arbitrary"))
+					{		
+						TIO_Size_t nshapes = MACSIO_MAIN_Size;
+						int shapesize;
+						TIO_Shape_t *shapetype = (TIO_Shape_t*)malloc(nshapes * sizeof(TIO_Shape_t));
+						int ncells_per_shape = 9801;
+
+						for (int s = 0; s<nshapes; s++){
+							shapetype[s] = (TIO_Shape_t)4;
+						}
+
+						int *global_nodes = (int*)malloc(sizeof(int)*MACSIO_MAIN_Size);
+						int *global_cells = (int*)malloc(sizeof(int)*MACSIO_MAIN_Size);
+
+						MPI_Allgather(&chunk_nodes, 1, MPI_INT, global_nodes, 1, MPI_INT, MACSIO_MAIN_Comm);
+						MPI_Allgather(&chunk_cells, 1, MPI_INT, global_cells, 1, MPI_INT, MACSIO_MAIN_Comm);
+				
+						for (i=0; i<MACSIO_MAIN_Size; i++)
+						{
+							nconnectivity = global_cells[i] * shapesize; 
+							TIO_Call( TIO_Set_Unstr_Chunk(file_id, mesh_id, i, (TIO_Dims_t)ndims,
+														global_nodes[i], global_cells[i],
+														nshapes, nconnectivity,
+														nghost_nodes, nghost_cells,
+														nghost_shapes, nghost_connectivity,
+														nmixcell, nmixcomp),
+									"Set UCDZOO Mesh Chunk Failed\n");
+						}
+
+						json_object *coords = json_object_path_get_object(mesh_obj, "Coords");
+
+						x_coord = json_object_extarr_data(json_object_path_get_extarr(coords, "XCoords"));
+						y_coord = json_object_extarr_data(json_object_path_get_extarr(coords, "YCoords"));
+						z_coord = json_object_extarr_data(json_object_path_get_extarr(coords, "ZCoords"));
+
+						int chunkID = JsonGetInt(mesh_obj, "ChunkID");
+						void const *node_connectivity = (void const*) json_object_extarr_data(JsonGetObj(topoobj, "Nodelist"));
+						int *nodeIDs = (int*) malloc(sizeof(int) * chunk_nodes);
+						int *cellIDs = (int*) malloc(sizeof(int) * chunk_cells);
+
+						for (int k = 0; k < chunk_nodes; k++){
+							nodeIDs[k] = k + ((int)global_nodes[chunkID] * chunkID);
+						}
+
+						for (int cell = 0; cell < chunk_cells; cell++){
+							cellIDs[cell] = cell + ((int)global_cells[chunkID] * chunkID);
+						}
+
+						void const *node_ptr = nodeIDs;
+						void const *cell_ptr = cellIDs;
+
+						TIO_Call( TIO_Write_UnstrMesh_Chunk(file_id, mesh_id, (TIO_Size_t)MACSIO_MAIN_Rank, TIO_XFER, 
+													TIO_INT, TIO_DOUBLE, node_ptr, cell_ptr, shapetype, 
+													&ncells_per_shape, node_connectivity, x_coord, y_coord, z_coord),
+									"Write Unstructured Mesh Failed\n");
+
+						free((void*)nodeIDs);
+						free((void*)cellIDs);
+					}
+
+				} else {
+					json_object *vars_array = json_object_path_get_array(part_obj, "Vars");
+					json_object *var_obj = json_object_array_get_idx(vars_array, v);
+					json_object *extarr_obj = json_object_path_get_extarr(var_obj, "data");
+
+					buf = json_object_extarr_data(extarr_obj);
+
+					TIO_Call( TIO_Write_UnstrQuant_Chunk(file_id, object_id, MACSIO_MAIN_Rank, TIO_XFER,
+														dtype_id, buf, (void*)TIO_NULL),
+										"Write UCDZOO Quant Chunk Failed\n")
+
+					TIO_Call(TIO_Close_Quant(file_id, object_id),
+							"Close Quant Failed");
+				}
 			}
 
 		}
 
-		free(centering);
 	}
 
-	TIO_Call( TIO_Close_Mesh(tiofile_id, mesh_id),
-	          "Close Mesh Failed\n");
+	TIO_Call( TIO_Close_Mesh(file_id, mesh_id),
+				"Close Mesh Failed");
+}
+
+static void main_dump_sif(json_object *main_obj, int dumpn, double dumpt)
+{
+#ifdef HAVE_MPI
+	char const *mesh_type = json_object_path_get_string(main_obj, "clargs/part_type");
+	char fileName[256];
+	TIO_Object_t state_id, variable_id;
+	char *state_name = "state0";
+
+	TIO_File_t tiofile_id;
+
+	MPI_Info mpiInfo = MPI_INFO_NULL;
+
+	/* Construct name for the HDF5 file */
+	sprintf(fileName, "%s_typhonio_%03d.%s",
+	        json_object_path_get_string(main_obj, "clargs/filebase"),
+	        dumpn,
+	        "h5"); //json_object_path_get_string(main_obj, "clargs/fileext"));
+
+	char *date = (char*)getDate();
+
+	TIO_Call( TIO_Create(fileName, &tiofile_id, TIO_ACC_REPLACE, "MACSio",
+	                     "0.9", date, fileName, MACSIO_MAIN_Comm, MPI_INFO_NULL, MACSIO_MAIN_Rank),
+	          "File Creation Failed\n");
+
+	TIO_Call( TIO_Create_State(tiofile_id, state_name, &state_id, 1, (TIO_Time_t)0.0, "us"),
+	          "State Create Failed\n");
+
+	json_object *part_array = json_object_path_get_array(main_obj, "problem/parts");
+	json_object *part_obj = json_object_array_get_idx(part_array, 0);
+	json_object *mesh_obj = json_object_path_get_object(part_obj, "Mesh");
+
+	if (!strcmp(JsonGetStr(mesh_obj, "MeshType"), "rectilinear"))
+		write_quad_mesh_whole(tiofile_id, state_id, main_obj, TIO_MESH_QUAD_COLINEAR);
+    else if (!strcmp(JsonGetStr(mesh_obj, "MeshType"), "curvilinear"))
+        write_quad_mesh_whole(tiofile_id, state_id, main_obj, TIO_MESH_QUAD_NONCOLINEAR);
+    else if (!strcmp(JsonGetStr(mesh_obj, "MeshType"), "ucdzoo"))
+        write_ucd_mesh_whole(tiofile_id, state_id, main_obj, "ucdzoo");
+    else if (!strcmp(JsonGetStr(mesh_obj, "MeshType"), "arbitrary"))
+        write_ucd_mesh_whole(tiofile_id, state_id, main_obj, "arbitrary");
+
+	TIO_Call( TIO_Close_State(tiofile_id, state_id),
+			"State Close Failed\n");
 
 	TIO_Call( TIO_Close(tiofile_id),
 	          "Close File failed\n");
