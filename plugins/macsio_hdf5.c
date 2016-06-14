@@ -668,7 +668,9 @@ H5Z_register_zfp(void)
 
 #endif /* HAVE_ZFP */
 
-/*!@}*/
+/* 
+@} 
+*/
 
 /* the name you want to assign to the interface */
 static char const *iface_name = "hdf5";

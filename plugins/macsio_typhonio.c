@@ -17,9 +17,6 @@
 
 #include <unistd.h>
 
-
-/* Disable debugging messages */
-
 /*!
 \addtogroup plugins
 @{
@@ -34,22 +31,33 @@ static char const *iface_name = "typhonio";
 static char const *iface_ext = "h5";
 static char *filename;
 
+static int no_collective = 0; /**< Controls whether collective I/O will be enabled in TyphonIO */
+
+
 char  errstr[TIO_STRLEN];
 TIO_t errnum;
 
-static int no_collective = 0;
 
-static int show_errors = 0;
-
+/*!
+\brief Convenience macro for issuing calls to TyphonIO and interpreting error codes
+*/
 #define TIO_Call(r,s) if((errnum=r) != TIO_SUCCESS) {TIO_Get_Error(errnum, errstr); printf("%s\n%s\n",s,errstr); exit(EXIT_FAILURE);}
 
 
+/*!
+\brief Process command-line arguments specific to this plugin
 
+Uses MACSIO_CLARGS_ProcessCmdline() to do its work.
+
+This example plugin is implemented to route command line arguments to memory locations
+(e.g. static variables) here in the plugin.  Alternatively, a plugin can choose to
+route the results of MACSIO_CLARGS_ProcessCmdline() to a JSON object. MACSio's main is
+implemented that way.
+*/
 static int process_args(
     int argi,      /**< [in] Argument index of first argument that is specific to this plugin */
     int argc,      /**< [in] argc as passed into main */
-    char *argv[]   /**< [in] argv as passed into main */
-)
+    char *argv[])  /**< [in] argv as passed into main */
 {
 	/* Can use MACSIO_CLARGS_TOJSON here instead in which case pass the pointer to
 	   a json_object* as first arg and eliminate all the pointers to specific
@@ -65,6 +73,14 @@ static int process_args(
 	return 0;
 }
 
+/*!
+\brief Return the current date as a formatted string
+
+This uses built in time/date functions to take the current date and format to a string
+for use as metadata in the TyphonIO file.
+
+\return A string in the format 'DayOFWeek dd-mm-yyyy hh:mm' 
+*/
 static char *getDate()
 {
 	time_t     now;
@@ -79,7 +95,6 @@ static char *getDate()
 	return ret;
 }
 
-
 /*!
 \brief CreateFile MIF Callback
 
@@ -91,8 +106,7 @@ This implments the MACSIO_MIF_CreateFile callback needed for a MIF mode plugin.
 static void *CreateTyphonIOFile(
     const char *fname,     /**< [in] Name of the MIF file to create */
     const char *nsname,    /**< [in] Name of the namespace within the file for caller should use. */
-    void *userData         /**< [in] Optional plugin-specific user-defined data */
-)
+    void *userData)        /**< [in] Optional plugin-specific user-defined data */
 {
 	TIO_File_t *retval = 0;
 	TIO_File_t file_id;
@@ -106,16 +120,21 @@ static void *CreateTyphonIOFile(
 		retval = (TIO_File_t *) malloc(sizeof(TIO_File_t));
 		*retval = file_id;
 	}
-
 	return (void *) retval;
 }
 
+/*!
+\brief OpenFile MIF Callback
+
+This implments the MACSIO_MIF_OpenFile callback needed for a MIF mode plugin.
+
+\return A void pointer to the plugin-specific file handle
+*/
 static void *OpenTyphonIOFile(
-    const char *fname,
-    const char *nsname,
-    MACSIO_MIF_ioFlags_t ioFlags,
-    void *userData
-)
+    const char *fname,				/**< [in] Name of the MIF file to create */	
+    const char *nsname,				/**< [in] Name of the namespace within the file the caller should use */
+    MACSIO_MIF_ioFlags_t ioFlags,	/**< [in] Various flags indicating behavior/options */
+    void *userData) 				/**< [in] Optional plugin-specific user-defined data */
 {
 	TIO_File_t *retval = 0;
 	TIO_File_t file_id;
@@ -132,21 +151,32 @@ static void *OpenTyphonIOFile(
 	return (void *) retval;
 }
 
+/*!
+\brief CloseFile MIF Callback
+
+This implments the MACSIO_CloseFile callback needed for a MIF mode plugin.
+*/
 static void CloseTyphonIOFile(
-    void *file,
-    void *userData
-)
+    void *file,			/**< [in] A void pointer to the plugin specific file handle */
+    void *userData) 	/**< [in] Optional plugin specific user-defined data */
 {
 	TIO_Call( TIO_Close(*(TIO_File_t*)file),
 	          "File Close Failed\n");
 }
+/*!
+\brief Write a single quad mesh part to a MIF file
 
+This method serializes the JSON object for the mesh part and then
+appends/writes to the end of the current file.
+
+This method is used for both Rectilinear (Colinear) and Curvilinear (Non-Colinear)
+Quad meshes.
+*/ 
 static void write_quad_mesh_part(
-	TIO_File_t file_id,
-	TIO_Object_t state_id,
-	json_object *part_obj,
-	TIO_Mesh_t tio_mesh_type
-)
+	TIO_File_t file_id,			/**< [in] The file id being used in MIF dump */ 
+	TIO_Object_t state_id,		/**< [in] The state id of the current dump */
+	json_object *part_obj,		/**< [in] JSON object representing this mesh part */
+	TIO_Mesh_t mesh_type)		/**< [in] Type of mesh [TIO_MESH_QUAD_COLINEAR/TIO_MESH_QUAD_NONCOLINEAR] */
 {
 	TIO_Object_t mesh_id;
 	json_object *coordobj;
@@ -157,7 +187,7 @@ static void write_quad_mesh_part(
 
 	dims[0] = JsonGetInt(part_obj, "Mesh/LogDims", 0);
 
-	if (tio_mesh_type == TIO_MESH_QUAD_COLINEAR)
+	if (mesh_type == TIO_MESH_QUAD_COLINEAR)
 	{
 		coordobj = JsonGetObj(part_obj, "Mesh/Coords/XAxisCoords"); // Rect Mesh
 	}
@@ -173,7 +203,7 @@ static void write_quad_mesh_part(
 	{
 		dims[1] = JsonGetInt(part_obj, "Mesh/LogDims", 1);
 
-		if (tio_mesh_type == TIO_MESH_QUAD_COLINEAR)
+		if (mesh_type == TIO_MESH_QUAD_COLINEAR)
 		{
 			coordobj = JsonGetObj(part_obj, "Mesh/Coords/YAxisCoords");
 		} 
@@ -187,7 +217,7 @@ static void write_quad_mesh_part(
 	{
 		dims[2] = JsonGetInt(part_obj, "Mesh/LogDims", 2);
 
-		if (tio_mesh_type == TIO_MESH_QUAD_COLINEAR)
+		if (mesh_type == TIO_MESH_QUAD_COLINEAR)
 		{
 			coordobj = JsonGetObj(part_obj, "Mesh/Coords/ZAxisCoords");
 		} 
@@ -198,7 +228,7 @@ static void write_quad_mesh_part(
 		coords[2] = json_object_extarr_data(coordobj);
 	}
 
-	TIO_Call( TIO_Create_Mesh(file_id, state_id, "mesh", &mesh_id, tio_mesh_type, 
+	TIO_Call( TIO_Create_Mesh(file_id, state_id, "mesh", &mesh_id, mesh_type, 
 							TIO_COORD_CARTESIAN, TIO_FALSE, "mesh_group", (TIO_Size_t)1,
 							TIO_DATATYPE_NULL, TIO_DOUBLE, (TIO_Dims_t)ndims,
 							(TIO_Size_t)dims[0], (TIO_Size_t)dims[1], (TIO_Size_t)dims[2],
@@ -207,7 +237,7 @@ static void write_quad_mesh_part(
 			                NULL, NULL, NULL),
 						"Create Mesh Failed\n");
 
-	if (tio_mesh_type == TIO_MESH_QUAD_COLINEAR){
+	if (mesh_type == TIO_MESH_QUAD_COLINEAR){
 		TIO_Call( TIO_Set_Quad_Chunk(file_id, mesh_id, (TIO_Size_t)0, (TIO_Dims_t)ndims,
 							0, dims[0]-1, 0, dims[1]-1, 0, dims[2]-1,
 							0, 0),
@@ -266,12 +296,20 @@ static void write_quad_mesh_part(
 
 }
 
+/*!
+\brief Write a single unstructured mesh part to a MIF file
+
+This method serializes the JSON object for the mesh part and then
+appends/writes to the end of the current file.
+
+This method is used for both Unstructured Zoo and Arbitraty 
+Unstructured meshes.
+*/ 
 static void write_ucdzoo_mesh_part(
-	TIO_File_t file_id,
-	TIO_Object_t state_id,
-	json_object *part_obj,
-	char const *topo_name
-)
+	TIO_File_t file_id,		/**< [in] The file id being used in MIF dump */
+	TIO_Object_t state_id,	/**< [in] The state id of the current dump */
+	json_object *part_obj,	/**< [in] JSON object representing this mesh part */
+	char const *topo_name)	/**< [in] Topology of unstructured mesh part [UCDZOO/Arbitrary] */
 {
 	TIO_Object_t mesh_id;
 	json_object *coordobj, *topoobj;
@@ -439,11 +477,16 @@ static void write_ucdzoo_mesh_part(
 	
 }
 
+/*!
+\brief Calls the relevant method for different mesh types writing a MIF dump
+
+This method checks the JSON object for the type of mesh and passes writing to
+the correct method with a corresponding mesh type flag
+*/  
 static void write_mesh_part(
-    TIO_File_t file_id,
-    TIO_Object_t state_id,
-    json_object *part_obj
-)
+    TIO_File_t file_id,				/**< [in] The file id being used in MIF dump */
+    TIO_Object_t state_id,			/**< [in] The state id of the current dump */
+    json_object *part_obj)	/**< [in] JSON object representing this mesh part */
 {
     if (!strcmp(JsonGetStr(part_obj, "Mesh/MeshType"), "rectilinear"))
         write_quad_mesh_part(file_id, state_id, part_obj, TIO_MESH_QUAD_COLINEAR);
@@ -455,12 +498,27 @@ static void write_mesh_part(
         write_ucdzoo_mesh_part(file_id, state_id, part_obj, "arbitrary");
 }
 
-typedef struct _user_data {
+/*!
+\brief Struct container for id of group and communicator
+*/
+typedef struct _group_data {
 	TIO_t groupId;
 	MPI_Comm groupComm;
-} user_data_t;
+} group_data_t;
 
-static void main_dump_mif(json_object *main_obj, int numFiles, int dumpn, double dumpt)
+/*!
+\brief Main MIF dump implementation for the plugin
+
+This function is called to handle MIF file dumps.
+
+It uses \ref MACSIO_MIF for the main dump, passing off to \ref write_mesh_part 
+to choose the correct functions based on mesh type
+*/
+static void main_dump_mif(
+	json_object *main_obj,	/**< [in] The main JSON object representing all data to be dumped */
+	int numFiles,			/**< [in] Number of files in the output dump */ 		
+	int dumpn,				/**< [in] The number/index of this dump */
+	double dumpt)			/**< [in] The time the be associated with this dump */
 {
 	int size, rank;
 	TIO_t *tioFile_ptr;
@@ -469,14 +527,12 @@ static void main_dump_mif(json_object *main_obj, int numFiles, int dumpn, double
 	char fileName[256];
 	int i, len;
 	int *theData;
-	user_data_t userData;
-	MACSIO_MIF_ioFlags_t ioFlags = {MACSIO_MIF_WRITE,
-	                                JsonGetInt(main_obj, "clargs/exercise_scr") & 0x1
-	                               };
+	group_data_t userData;
+	MACSIO_MIF_ioFlags_t ioFlags = {MACSIO_MIF_WRITE, JsonGetInt(main_obj, "clargs/exercise_scr") & 0x1};
 
-#warning SET FILE AND DATASET PROPERTIES
-#warning DIFFERENT MPI TAGS FOR DIFFERENT PLUGINS AND CONTEXTS
-	MACSIO_MIF_baton_t *bat = MACSIO_MIF_Init(numFiles, ioFlags, MACSIO_MAIN_Comm, 3,
+	#warning SET FILE AND DATASET PROPERTIES
+	#warning DIFFERENT MPI TAGS FOR DIFFERENT PLUGINS AND CONTEXTS
+	MACSIO_MIF_baton_t *bat = MACSIO_MIF_Init(numFiles, ioFlags, MACSIO_MAIN_Comm, 1,
 	                          CreateTyphonIOFile, OpenTyphonIOFile, CloseTyphonIOFile, &userData);
 
 	rank = json_object_path_get_int(main_obj, "parallel/mpi_rank");
@@ -523,11 +579,20 @@ static void main_dump_mif(json_object *main_obj, int numFiles, int dumpn, double
 
 }
 
+/*!
+\brief Write all quad mesh parts to a SIF file
+
+This method serializes the JSON object for all mesh parts and then
+appends/writes to the end of the shared file.
+
+This method is used for both Rectilinear (Colinear) and Curvilinear (Non-Colinear)
+Quad meshes.
+*/ 
 static void write_quad_mesh_whole(
-	TIO_File_t file_id, 
-	TIO_Object_t state_id,
-	json_object *main_obj,
-	TIO_Mesh_t mesh_type)
+	TIO_File_t file_id, 	/**< [in] The file id being used in SIF dump */
+	TIO_Object_t state_id,	/**< [in] The state id of the current dump */
+	json_object *main_obj,	/**< [in] The main JSON object containing mesh data */
+	TIO_Mesh_t mesh_type) 	/**< [in] Type of mesh [TIO_MESH_QUAD_COLINEAR/TIO_MESH_QUAD_NONCOLINEAR] */ 	
 {
 	TIO_Object_t mesh_id;
 	TIO_Object_t object_id;
@@ -710,11 +775,6 @@ static void write_quad_mesh_whole(
 														TIO_DOUBLE, x_coord, y_coord, z_coord),
 								"Write Non-Colinear Mesh Coords failed\n");
 				}
-
-				free(x_coord_root);
-			// free(y_coord_root);
-			// free(z_coord_root);
-	    
 			} else {				
 				TIO_Call( TIO_Write_QuadQuant_Chunk(file_id, object_id, MACSIO_MAIN_Rank, 
 												TIO_XFER, dtype_id, buf, (void*)TIO_NULL),
@@ -735,11 +795,20 @@ static void write_quad_mesh_whole(
 
 }
 
+/*!
+\brief Write all unstructured mesh parts to a SIF file
+
+This method serializes the JSON object for all mesh parts and then
+appends/writes to the end of the shared file.
+
+This method is used for both Unstructured Zoo and Arbitraty 
+Unstructured meshes.
+*/ 
 static void write_ucd_mesh_whole(
-	TIO_File_t file_id, 
-	TIO_Object_t state_id,
-	json_object *main_obj,
-	char *mesh_type)
+	TIO_File_t file_id, 	/**< [in] The file id being used in SIF dump */
+	TIO_Object_t state_id,	/**< [in] The state id of the current dump */
+	json_object *main_obj,	/**< [in] The main JSON object containing mesh data */
+	char *mesh_type)		/**< [in] Type of mesh [TIO_MESH_QUAD_COLINEAR/TIO_MESH_QUAD_NONCOLINEAR] */ 
 {
 	TIO_Object_t mesh_id;
 	TIO_Object_t object_id;
@@ -1017,15 +1086,25 @@ static void write_ucd_mesh_whole(
 				"Close Mesh Failed");
 }
 
-static void main_dump_sif(json_object *main_obj, int dumpn, double dumpt)
+/*!
+\brief Main SIF dump implementation for the plugin
+
+This function is called to handle SIF file dumps.
+
+The file and state is created before passing off to \ref write_quad_mesh_whole or
+\ref write_ucd_mesh_whole to handle the dump of data
+*/
+static void main_dump_sif(
+	json_object *main_obj,	/**< [in] The main JSON object containing mesh data */
+	int dumpn,				/**< [in] The number/index of this dump */ 
+	double dumpt)			/**< [in] The time the be associated with this dump */
 {
 #ifdef HAVE_MPI
 	char const *mesh_type = json_object_path_get_string(main_obj, "clargs/part_type");
 	char fileName[256];
+	TIO_File_t tiofile_id;
 	TIO_Object_t state_id, variable_id;
 	char *state_name = "state0";
-
-	TIO_File_t tiofile_id;
 
 	MPI_Info mpiInfo = MPI_INFO_NULL;
 
@@ -1067,11 +1146,25 @@ static void main_dump_sif(json_object *main_obj, int dumpn, double dumpt)
 #endif
 }
 
-static void main_dump(int argi, int argc, char **argv, json_object * main_obj, int dumpn, double dumpt)
+/*!
+\brief Main dump implementation for the TyphonIO plugin
+
+This is the function MACSio main calls to orchestrate the dump of data with the plugin.
+
+The command line arguments are processed to set up the application behaviour before 
+I/O control is passed to either \ref main_dump_mif or \ref main_dump_sif 
+*/
+static void main_dump(
+	int argi,				/**< [in] Command-line argument index at which first plugin-specific arg appears */
+	int argc,				/**< [in] argc from main */
+	char **argv,			/**< [in] argv from main */
+	json_object * main_obj,	/**< [in] The main json object representing all data to be dumped */
+	int dumpn,				/**< [in] The number/index of this dump */
+	double dumpt)			/**< [in] The time to be associated with this dump (like a simulation's time) */
 {
 	int rank, size, numFiles;
 	/* Without this barrier, I get strange behavior with Silo's MACSIO_MIF interface */
-	mpi_errno = MPI_Barrier(MACSIO_MAIN_Comm);
+	//mpi_errno = MPI_Barrier(MACSIO_MAIN_Comm);
 
 	/* process cl args */
 	process_args(argi, argc, argv);
@@ -1079,14 +1172,22 @@ static void main_dump(int argi, int argc, char **argv, json_object * main_obj, i
 	rank = json_object_path_get_int(main_obj, "parallel/mpi_rank");
 	size = json_object_path_get_int(main_obj, "parallel/mpi_size");
 
-	/* ensure we're in MIF mode and determine the file count */
+	/* Decide which method to pass control to for MIF or SIF mode */
 	json_object *parfmode_obj = json_object_path_get_array(main_obj, "clargs/parallel_file_mode");
 	if (parfmode_obj) {
 		json_object *modestr = json_object_array_get_idx(parfmode_obj, 0);
 		json_object *filecnt = json_object_array_get_idx(parfmode_obj, 1);
 
 		if (!strcmp(json_object_get_string(modestr), "SIF")) {
-			main_dump_sif(main_obj, dumpn, dumpt);
+			float avg_num_parts = json_object_path_get_double(main_obj, "clargs/avg_num_parts");
+			if (avg_num_parts == (float ((int) avg_num_parts)))
+				main_dump_sif(main_obj, dumpn, dumpt);
+			else {
+				// CURRENTLY, SIF CAN WORK ONLY ON WHOLE PART COUNTS
+				MACSIO_LOG_MSG(Die, ("TyphonIO plugin cannot currently handle SIF mode where "
+				                     "there are different numbers of parts on each MPI rank. "
+				                     "Set --avg_num_parts to an integral value." ));
+			}
 		}
 		else {
 			numFiles = json_object_get_int(filecnt);
@@ -1101,7 +1202,7 @@ static void main_dump(int argi, int argc, char **argv, json_object * main_obj, i
 				main_dump_sif(main_obj, dumpn, dumpt);
 			else {
 				// CURRENTLY, SIF CAN WORK ONLY ON WHOLE PART COUNTS
-				MACSIO_LOG_MSG(Die, ("HDF5 plugin cannot currently handle SIF mode where "
+				MACSIO_LOG_MSG(Die, ("TyphonIO plugin cannot currently handle SIF mode where "
 				                     "there are different numbers of parts on each MPI rank. "
 				                     "Set --avg_num_parts to an integral value." ));
 			}
