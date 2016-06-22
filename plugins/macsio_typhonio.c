@@ -185,47 +185,36 @@ static void write_quad_mesh_part(
 	int dims[3] = {1,1,1};
 	int dimsz[3] = {1,1,1};
 
-	dims[0] = JsonGetInt(part_obj, "Mesh/LogDims", 0);
-
-	if (mesh_type == TIO_MESH_QUAD_COLINEAR)
-	{
-		coordobj = JsonGetObj(part_obj, "Mesh/Coords/XAxisCoords"); // Rect Mesh
-	}
-	else
-	{
-		coordobj = JsonGetObj(part_obj, "Mesh/Coords/XCoords");	// Curv Mesh
-	}
-
-	coords[0] = json_object_extarr_data(coordobj);
-
-
-	if (ndims > 1)
-	{
-		dims[1] = JsonGetInt(part_obj, "Mesh/LogDims", 1);
-
-		if (mesh_type == TIO_MESH_QUAD_COLINEAR)
-		{
-			coordobj = JsonGetObj(part_obj, "Mesh/Coords/YAxisCoords");
-		} 
-		else
-		{
-			coordobj = JsonGetObj(part_obj, "Mesh/Coords/YCoords");
+	if (mesh_type == TIO_MESH_QUAD_COLINEAR){
+		switch(ndims){
+			case 3:
+				dims[2] = JsonGetInt(part_obj, "Mesh/LogDims", 2);
+				coordobj = JsonGetObj(part_obj, "Mesh/Coords/ZAxisCoords");
+				coords[2] = json_object_extarr_data(coordobj);
+			case 2:
+				dims[1] = JsonGetInt(part_obj, "Mesh/LogDims", 1);
+				coordobj = JsonGetObj(part_obj, "Mesh/Coords/YAxisCoords");
+				coords[1] = json_object_extarr_data(coordobj);
+			default:
+				dims[0] = JsonGetInt(part_obj, "Mesh/LogDims", 0);
+				coordobj = JsonGetObj(part_obj, "Mesh/Coords/XAxisCoords");
+				coords[0] = json_object_extarr_data(coordobj);
 		}
-		coords[1] = json_object_extarr_data(coordobj);
-	}
-	if (ndims > 2)
-	{
-		dims[2] = JsonGetInt(part_obj, "Mesh/LogDims", 2);
-
-		if (mesh_type == TIO_MESH_QUAD_COLINEAR)
-		{
-			coordobj = JsonGetObj(part_obj, "Mesh/Coords/ZAxisCoords");
-		} 
-		else
-		{
-			coordobj = JsonGetObj(part_obj, "Mesh/Coords/ZCoords");
-		}
-		coords[2] = json_object_extarr_data(coordobj);
+	} else {
+		switch(ndims){
+			case 3:
+				dims[2] = JsonGetInt(part_obj, "Mesh/LogDims", 2);
+				coordobj = JsonGetObj(part_obj, "Mesh/Coords/ZCoords");
+				coords[2] = json_object_extarr_data(coordobj);
+			case 2:
+				dims[1] = JsonGetInt(part_obj, "Mesh/LogDims", 1);
+				coordobj = JsonGetObj(part_obj, "Mesh/Coords/YCoords");
+				coords[1] = json_object_extarr_data(coordobj);
+			default:
+				dims[0] = JsonGetInt(part_obj, "Mesh/LogDims", 0);
+				coordobj = JsonGetObj(part_obj, "Mesh/Coords/XCoords");
+				coords[0] = json_object_extarr_data(coordobj);
+		}	
 	}
 
 	TIO_Call( TIO_Create_Mesh(file_id, state_id, "mesh", &mesh_id, mesh_type, 
@@ -320,30 +309,30 @@ static void write_ucdzoo_mesh_part(
 	int dims[3] = {1,1,1};
 	int dimsz[3] = {1,1,1};
 
-	coordobj = JsonGetObj(part_obj, "Mesh/Coords/XCoords");
-    coords[0] = json_object_extarr_data(coordobj);
-    dims[0] = JsonGetInt(part_obj, "Mesh/LogDims", 0);
-    dimsz[0] = dims[0]-1;
-    nnodes *= dims[0];
-    nzones *= dimsz[0];
-    if (ndims > 1)
-    {
-        coordobj = JsonGetObj(part_obj, "Mesh/Coords/YCoords");
-        coords[1] = json_object_extarr_data(coordobj);
-        dims[1] = JsonGetInt(part_obj, "Mesh/LogDims", 1);
-        dimsz[1] = dims[1]-1;
-        nnodes *= dims[1];
-        nzones *= dimsz[1];
-    }
-    if (ndims > 2)
-    {
-        coordobj = JsonGetObj(part_obj, "Mesh/Coords/ZCoords");
-        coords[2] = json_object_extarr_data(coordobj);
-        dims[2] = JsonGetInt(part_obj, "Mesh/LogDims", 2);
-        dimsz[2] = dims[2]-1;
-        nnodes *= dims[2];
-        nzones *= dimsz[2];
-    }
+	switch ndims{
+		case 2:
+			coordobj = JsonGetObj(part_obj, "Mesh/Coords/ZCoords");
+	        coords[2] = json_object_extarr_data(coordobj);
+	        dims[2] = JsonGetInt(part_obj, "Mesh/LogDims", 2);
+	        dimsz[2] = dims[2]-1;
+	        nnodes *= dims[2];
+	        nzones *= dimsz[2];
+		case 1:
+	        coordobj = JsonGetObj(part_obj, "Mesh/Coords/YCoords");
+	        coords[1] = json_object_extarr_data(coordobj);
+	        dims[1] = JsonGetInt(part_obj, "Mesh/LogDims", 1);
+	        dimsz[1] = dims[1]-1;
+	        nnodes *= dims[1];
+	        nzones *= dimsz[1];
+		default:
+			coordobj = JsonGetObj(part_obj, "Mesh/Coords/XCoords");
+		    coords[0] = json_object_extarr_data(coordobj);
+		    dims[0] = JsonGetInt(part_obj, "Mesh/LogDims", 0);
+		    dimsz[0] = dims[0]-1;
+		    nnodes *= dims[0];
+		    nzones *= dimsz[0];			
+	}
+
 
     if (ndims == 1 || !strcmp(topo_name, "ucdzoo"))
     /* UCDZOO */
