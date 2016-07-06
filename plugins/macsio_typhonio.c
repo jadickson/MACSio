@@ -309,7 +309,7 @@ static void write_ucdzoo_mesh_part(
 	int dims[3] = {1,1,1};
 	int dimsz[3] = {1,1,1};
 
-	switch ndims{
+	switch(ndims){
 		case 2:
 			coordobj = JsonGetObj(part_obj, "Mesh/Coords/ZCoords");
 	        coords[2] = json_object_extarr_data(coordobj);
