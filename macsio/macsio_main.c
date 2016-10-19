@@ -34,6 +34,7 @@ Place, Suite 330, Boston, MA 02111-1307 USA
 #include <sys/time.h>
 #include <sys/types.h>
 #include <unistd.h>
+#include <time.h>
 
 #ifdef HAVE_SCR
 #ifdef __cplusplus
@@ -434,6 +435,8 @@ static json_object *ProcessCommandLine(int argc, char *argv[], int *plugin_argi)
             "bytes.",
         "--num_dumps %d", "10",
             "Total number of dumps to marshal",
+	"--sleep_time %d", "0",
+	    "Time to wait between dumps",
         "--max_dir_size %d", MACSIO_CLARGS_NODEFAULT,
             "The maximum number of filesystem objects (e.g. files or subdirectories)\n"
             "that MACSio will create in any one subdirectory. This is typically\n"
@@ -589,7 +592,7 @@ main_write(int argi, int argc, char **argv, json_object *main_obj)
     double dump_loop_start, dump_loop_end;
     double min_dump_loop_start, max_dump_loop_end;
     int exercise_scr = JsonGetInt(main_obj, "clargs/exercise_scr");
-
+    int sleep_time = JsonGetInt(main_obj, "clargs/sleep_time");
     /* Sanity check args */
 
     /* Generate a static problem object to dump on each dump */
@@ -678,6 +681,12 @@ main_write(int argi, int argc, char **argv, json_object *main_obj)
             MU_PrByts(problem_nbytes, 0, nbytes_str, sizeof(nbytes_str)),
             MU_PrSecs(dt, 0, seconds_str, sizeof(seconds_str)),
             MU_PrBW(problem_nbytes, dt, 0, bandwidth_str, sizeof(bandwidth_str))));
+#warning IS THIS A GOOD WAY OF SLEEPING? SHOULD THERE BE SOME COMPUTE
+	/*SLEEP*/
+	struct timespec tim, tim2;
+	tim.tv_sec = sleep_time;
+	tim.tv_nsec = 0;
+	nanosleep(&tim, &tim2);
     }
 
     dump_loop_end = MT_Time();
