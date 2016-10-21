@@ -1184,3 +1184,8 @@ int MACSIO_DATA_SimpleAssignKPartsToNProcs(int k, int n, int my_rank, int *my_pa
 {
     return 0;
 }
+
+void MACSIO_DATA_MutateDataset(json_object *main_obj, double *mutateSequence, int dumpNum)
+{
+
+}

@@ -656,7 +656,7 @@ main_write(int argi, int argc, char **argv, json_object *main_obj)
 #warning REPLACE DUMPN AND DUMPT WITH A STATE TUPLE
 #warning SHOULD HAVE PLUGIN RETURN FILENAMES SO MACSIO CAN STAT FOR TOTAL BYTES ON DISK
             /* do the dump */
-            (*(iface->dumpFunc))(argi, argc, argv, main_obj, dumpNum, dumpTime);
+	    (*(iface->dumpFunc))(argi, argc, argv, main_obj, dumpNum, dumpTime);
 #ifdef HAVE_MPI
             mpi_errno = 0;
 #endif
@@ -676,6 +676,10 @@ main_write(int argi, int argc, char **argv, json_object *main_obj)
         dumpBytes += problem_nbytes;
         dumpCount += 1;
 
+	/* change dataset size if mutation is used */
+	if (dataset_mutation == True){
+		modifyDataset(*main_obj, mutateSequence, dumpNum);
+	}	
         /* log dump timing */
         MACSIO_LOG_MSG(Info, ("Dump %02d BW: %s/%s = %s", dumpNum,
             MU_PrByts(problem_nbytes, 0, nbytes_str, sizeof(nbytes_str)),
@@ -683,10 +687,12 @@ main_write(int argi, int argc, char **argv, json_object *main_obj)
             MU_PrBW(problem_nbytes, dt, 0, bandwidth_str, sizeof(bandwidth_str))));
 #warning IS THIS A GOOD WAY OF SLEEPING? SHOULD THERE BE SOME COMPUTE
 	/*SLEEP*/
-	struct timespec tim, tim2;
-	tim.tv_sec = sleep_time;
-	tim.tv_nsec = 0;
-	nanosleep(&tim, &tim2);
+	if  (dumpNum < json_object_path_get_int(main_obj, "clargs/num_dumps")){
+		struct timespec tim, tim2;
+		tim.tv_sec = sleep_time;
+		tim.tv_nsec = 0;
+		nanosleep(&tim, &tim2);
+	}
     }
 
     dump_loop_end = MT_Time();
