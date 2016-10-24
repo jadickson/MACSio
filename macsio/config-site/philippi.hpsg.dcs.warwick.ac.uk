@@ -1,4 +1,5 @@
 HDF5_HOME=/home/jd/bin/hdf5/current
+TYPHONIO_HOME=/home/jd/bin/typhonio/gcc
 
 CXX=mpicxx
 CC=mpicc

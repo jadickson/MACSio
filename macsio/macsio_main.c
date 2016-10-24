@@ -649,8 +649,7 @@ main_write(int argi, int argc, char **argv, json_object *main_obj)
             if (exercise_scr)
                 SCR_Start_checkpoint();
 #endif
-
-            /* Start dump timer */
+                       /* Start dump timer */
             heavy_dump_tid = MT_StartTimer("heavy dump", main_wr_grp, dumpNum);
 
 #warning REPLACE DUMPN AND DUMPT WITH A STATE TUPLE
@@ -675,11 +674,17 @@ main_write(int argi, int argc, char **argv, json_object *main_obj)
         dumpTime += dt;
         dumpBytes += problem_nbytes;
         dumpCount += 1;
+    
+        int dataset_mutation = 1;
+    	/* change dataset size if mutation is used */
+    	if (dataset_mutation){
+	        double *mutateSequence;
+            json_object *mutated_object = MACSIO_DATA_MutateDataset(main_obj, mutateSequence, dumpNum);
+            main_obj = mutated_object;
+            //printf("%s\n", json_object_to_json_string_ext(main_obj, JSON_C_TO_STRING_PRETTY));
+            //printf("Dump %d\n", dumpNum);
+        }
 
-	/* change dataset size if mutation is used */
-	if (dataset_mutation == True){
-		modifyDataset(*main_obj, mutateSequence, dumpNum);
-	}	
         /* log dump timing */
         MACSIO_LOG_MSG(Info, ("Dump %02d BW: %s/%s = %s", dumpNum,
             MU_PrByts(problem_nbytes, 0, nbytes_str, sizeof(nbytes_str)),
