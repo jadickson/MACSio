@@ -414,6 +414,10 @@ static json_object *ProcessCommandLine(int argc, char *argv[], int *plugin_argi)
             "about once every 10 dumps. Note: at present MACSio will not actually\n"
             "compute/construct a different topology. It will only inform a plugin\n"
             "that a given dump should be treated as a change in topology.",
+        "--data_mutate_sequence %s", MACSIO_CLARGS_NODEFAULT,
+            "A comma separated modifier sequence for varying the size of the dataset between\n"
+            "checkpoint dumps.\n"
+            "String format: 1.5,2.0,1.1,1.8",
         "--meta_type %s", "tabular",
             "Specify the type of metadata objects to include in each main dump.\n"
             "Options are 'tabular', 'amorphous'. For tabular type data, MACSio\n"
@@ -580,6 +584,70 @@ write_timings_file(char const *filename)
     MACSIO_LOG_LogFinalize(timing_log);
 }
 
+int split (const char *str, char c, char ***arr)
+{
+    int count = 1;
+    int token_len = 1;
+    int i = 0;
+    char *p;
+    char *t;
+
+    p = (char*)str;
+    while (*p != '\0'){
+        if (*p == c)
+            count++;
+        p++;
+    }
+    *arr = (char**) malloc(sizeof(char*) * count);
+    if (*arr == NULL)
+        exit(1);
+    p = (char*)str;
+    while (*p != '\0'){
+        if (*p == c){
+            (*arr)[i] = (char*) malloc( sizeof(char) * token_len );
+            if ((*arr)[i] == NULL)
+                exit(1);
+
+            token_len = 0;
+            i++;
+        }
+        p++;
+        token_len++;
+    }
+    (*arr)[i] = (char*) malloc( sizeof(char) * token_len );
+    if ((*arr)[i] == NULL)
+        exit(1);
+    i = 0;
+    p = (char*)str;
+    t = ((*arr)[i]);
+    while (*p != '\0'){
+        if (*p != c && *p != '\0'){
+            *t = *p;
+            t++;
+        } else {
+            *t = '\0';
+            i++;
+            t = ((*arr)[i]);
+        }
+        p++;
+    }
+    return count;
+}
+
+double * get_modifier_array(char *modifier_string){
+
+    if ((modifier_string != NULL) && (modifier_string[0] == '\0')){
+        return NULL;
+    }
+    char **modifier_str_array = NULL;
+    int c = 0;
+    c = split(modifier_string, ',', &modifier_str_array);
+    double *modifier_dbl_array = (double*)malloc(sizeof(double)*c);
+    for (int i=0; i<c;i++){
+        modifier_dbl_array[i] = atof(modifier_str_array[i]);
+    }
+    return modifier_dbl_array;
+}
 static int
 main_write(int argi, int argc, char **argv, json_object *main_obj)
 {
@@ -602,6 +670,9 @@ main_write(int argi, int argc, char **argv, json_object *main_obj)
 #warning MAKE JSON OBJECT KEY CASE CONSISTENT
     json_object_object_add(main_obj, "problem", problem_obj);
 
+    /* Attempt to read the dataset modifier array from file */
+    double *modifier_array = get_modifier_array((char*)json_object_path_get_string(main_obj, "clargs/data_mutate_sequence"));
+    
     /* Just here for debugging for the moment */
     if (MACSIO_LOG_DebugLevel >= 2)
     {
@@ -675,14 +746,11 @@ main_write(int argi, int argc, char **argv, json_object *main_obj)
         dumpBytes += problem_nbytes;
         dumpCount += 1;
     
-        int dataset_mutation = 1;
+        //int dataset_mutation = 1;
     	/* change dataset size if mutation is used */
-    	if (dataset_mutation){
-	        double *mutateSequence;
-            json_object *mutated_object = MACSIO_DATA_MutateDataset(main_obj, mutateSequence, dumpNum);
+    	if (modifier_array){
+            json_object *mutated_object = MACSIO_DATA_MutateDataset(main_obj, modifier_array, dumpNum);
             main_obj = mutated_object;
-            //printf("%s\n", json_object_to_json_string_ext(main_obj, JSON_C_TO_STRING_PRETTY));
-            //printf("Dump %d\n", dumpNum);
         }
 
         /* log dump timing */
@@ -701,6 +769,8 @@ main_write(int argi, int argc, char **argv, json_object *main_obj)
     }
 
     dump_loop_end = MT_Time();
+
+    free(modifier_array);
 
     MACSIO_LOG_MSG(Info, ("Overall BW: %s/%s = %s",
         MU_PrByts(dumpBytes, 0, nbytes_str, sizeof(nbytes_str)),

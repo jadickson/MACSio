@@ -1191,9 +1191,11 @@ MACSIO_DATA_MutateDataset(json_object *main_obj, double *mutateSequence, int dum
     // Extract the clargs object from the main json object and overwrite the problem description parameters 
     json_object *clargs_obj = json_object_path_get_object(main_obj, "clargs");
 
+    int sequence_length = sizeof(mutateSequence)/sizeof(double);
+
     // Add different number of vars or increase mesh size and overwrite existing value
-    int doubled_vars = json_object_path_get_int(main_obj, "clargs/vars_per_part") * 2;
-    json_object_object_add(clargs_obj, "vars_per_part", json_object_new_int(doubled_vars));
+    //int doubled_vars = json_object_path_get_int(main_obj, "clargs/vars_per_part") * 2;
+    //json_object_object_add(clargs_obj, "vars_per_part", json_object_new_int(doubled_vars));
 
     // Add modified clargs object and original parallel object to a new main json object
     // The problem data is generated from handing off to the generate method
