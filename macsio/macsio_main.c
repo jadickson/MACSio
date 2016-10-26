@@ -634,19 +634,19 @@ int split (const char *str, char c, char ***arr)
     return count;
 }
 
-double * get_modifier_array(char *modifier_string){
+int get_modifier_array(double **modifier_array, char *modifier_string){
 
     if ((modifier_string != NULL) && (modifier_string[0] == '\0')){
-        return NULL;
+        return 0;
     }
     char **modifier_str_array = NULL;
     int c = 0;
     c = split(modifier_string, ',', &modifier_str_array);
-    double *modifier_dbl_array = (double*)malloc(sizeof(double)*c);
+    *modifier_array = (double*)malloc(sizeof(double)*c);
     for (int i=0; i<c;i++){
-        modifier_dbl_array[i] = atof(modifier_str_array[i]);
+        (*modifier_array)[i] = atof(modifier_str_array[i]);
     }
-    return modifier_dbl_array;
+    return c;
 }
 static int
 main_write(int argi, int argc, char **argv, json_object *main_obj)
@@ -671,8 +671,9 @@ main_write(int argi, int argc, char **argv, json_object *main_obj)
     json_object_object_add(main_obj, "problem", problem_obj);
 
     /* Attempt to read the dataset modifier array from file */
-    double *modifier_array = get_modifier_array((char*)json_object_path_get_string(main_obj, "clargs/data_mutate_sequence"));
-    
+    double *modifier_array;
+    int sequence_length = get_modifier_array(&modifier_array,(char*)json_object_path_get_string(main_obj, "clargs/data_mutate_sequence"));
+
     /* Just here for debugging for the moment */
     if (MACSIO_LOG_DebugLevel >= 2)
     {
@@ -748,7 +749,7 @@ main_write(int argi, int argc, char **argv, json_object *main_obj)
     
         //int dataset_mutation = 1;
     	/* change dataset size if mutation is used */
-    	if (modifier_array){
+    	if (modifier_array && (dumpNum < sequence_length)){
             json_object *mutated_object = MACSIO_DATA_MutateDataset(main_obj, modifier_array, dumpNum);
             main_obj = mutated_object;
         }
@@ -759,13 +760,13 @@ main_write(int argi, int argc, char **argv, json_object *main_obj)
             MU_PrSecs(dt, 0, seconds_str, sizeof(seconds_str)),
             MU_PrBW(problem_nbytes, dt, 0, bandwidth_str, sizeof(bandwidth_str))));
 #warning IS THIS A GOOD WAY OF SLEEPING? SHOULD THERE BE SOME COMPUTE
-	/*SLEEP*/
-	if  (dumpNum < json_object_path_get_int(main_obj, "clargs/num_dumps")){
-		struct timespec tim, tim2;
-		tim.tv_sec = sleep_time;
-		tim.tv_nsec = 0;
-		nanosleep(&tim, &tim2);
-	}
+        /*SLEEP*/
+        if  (dumpNum < json_object_path_get_int(main_obj, "clargs/num_dumps")){
+            struct timespec tim, tim2;
+            tim.tv_sec = sleep_time;
+            tim.tv_nsec = 0;
+            nanosleep(&tim, &tim2);
+        }
     }
 
     dump_loop_end = MT_Time();
