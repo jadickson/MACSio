@@ -749,7 +749,7 @@ main_write(int argi, int argc, char **argv, json_object *main_obj)
     
         //int dataset_mutation = 1;
     	/* change dataset size if mutation is used */
-    	if (modifier_array && (dumpNum < sequence_length)){
+    	if (dumpNum < sequence_length){
             json_object *mutated_object = MACSIO_DATA_MutateDataset(main_obj, modifier_array, dumpNum);
             main_obj = mutated_object;
         }
@@ -761,7 +761,7 @@ main_write(int argi, int argc, char **argv, json_object *main_obj)
             MU_PrBW(problem_nbytes, dt, 0, bandwidth_str, sizeof(bandwidth_str))));
 #warning IS THIS A GOOD WAY OF SLEEPING? SHOULD THERE BE SOME COMPUTE
         /*SLEEP*/
-        if  (dumpNum < json_object_path_get_int(main_obj, "clargs/num_dumps")){
+        if  (sleep_time > 0 && dumpNum < json_object_path_get_int(main_obj, "clargs/num_dumps")){
             struct timespec tim, tim2;
             tim.tv_sec = sleep_time;
             tim.tv_nsec = 0;
@@ -771,7 +771,8 @@ main_write(int argi, int argc, char **argv, json_object *main_obj)
 
     dump_loop_end = MT_Time();
 
-    free(modifier_array);
+    if (sequence_length > 0)
+        free(modifier_array);
 
     MACSIO_LOG_MSG(Info, ("Overall BW: %s/%s = %s",
         MU_PrByts(dumpBytes, 0, nbytes_str, sizeof(nbytes_str)),
