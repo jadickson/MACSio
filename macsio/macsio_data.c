@@ -806,27 +806,27 @@ make_scalar_var(int ndims, int const *dims, double const *bounds,
             {
 #warning PUT THESE INTO A GENERATOR FUNCTION
 #warning ACCOUNT FOR HALF ZONE OFFSETS
-                if (!strcmp(kind, "constant"))
+                if (strstr(kind, "constant") != NULL)
                     valdp[n++] = 1.0;
-                else if (!strcmp(kind, "random"))
+                else if (strstr(kind, "random") != NULL)
                     valdp[n++] = (double) (random() % 1000) / 1000;
-                else if (!strcmp(kind, "xramp"))
+                else if (strstr(kind, "xramp") != NULL)
                     valdp[n++] = bounds[0] + i * MACSIO_UTILS_XDelta(dims, bounds);
-                else if (!strcmp(kind, "spherical"))
+                else if (strstr(kind, "spherical") != NULL)
                 {
                     double x = bounds[0] + i * MACSIO_UTILS_XDelta(dims, bounds);
                     double y = bounds[1] + j * MACSIO_UTILS_YDelta(dims, bounds);
                     double z = bounds[2] + k * MACSIO_UTILS_ZDelta(dims, bounds);
                     valdp[n++] = sqrt(x*x+y*y+z*z);
                 }
-                else if (!strcmp(kind, "noise"))
+                else if (strstr(kind, "noise") != NULL)
                 {
                     double x = bounds[0] + i * MACSIO_UTILS_XDelta(dims, bounds);
                     double y = bounds[1] + j * MACSIO_UTILS_YDelta(dims, bounds);
                     double z = bounds[2] + k * MACSIO_UTILS_ZDelta(dims, bounds);
                     valdp[n++] = noise(x,y,z,bounds);
                 }
-                else if (!strcmp(kind, "noise_sum"))
+                else if (strstr(kind, "noise_sum") != NULL)
                 {
 #warning SHOULD USE GLOBAL DIMS DIAMETER HERE
                     int q, nlevels = (int) log2(sqrt(dims_diameter2))+1;
@@ -841,12 +841,12 @@ make_scalar_var(int ndims, int const *dims, double const *bounds,
                         mult *= 2;
                     }
                 }
-                else if (!strcmp(kind, "ysin"))
+                else if (strstr(kind, "ysin") != NULL)
                 {
                     double y = bounds[1] + j * MACSIO_UTILS_YDelta(dims, bounds);
                     valdp[n++] = sin(y*3.1415266);
                 }
-                else if (!strcmp(kind, "xlayers"))
+                else if (strstr(kind, "xlayers") != NULL)
                 {
                     valip[n++] = (i / 20) % 3;
                 }
@@ -1062,7 +1062,14 @@ MACSIO_DATA_GenerateTimeZeroDumpObject(json_object *main_obj, int *rank_owning_c
     json_object *global_obj = rank_owning_chunkId?0:json_object_new_object();
     json_object *part_array = rank_owning_chunkId?0:json_object_new_array();
     int size = json_object_path_get_int(main_obj, "parallel/mpi_size");
-    int part_size = json_object_path_get_int(main_obj, "clargs/part_size") / sizeof(double);
+    int vis_part_size = json_object_path_get_int(main_obj, "clargs/vis_part_size") / sizeof(double);
+    int part_size;
+    if (vis_part_size){
+        part_size = vis_part_size;
+    }else{
+        part_size = json_object_path_get_int(main_obj, "clargs/part_size") / sizeof(double);
+    }
+
     double avg_num_parts = json_object_path_get_double(main_obj, "clargs/avg_num_parts");
     int dim = json_object_path_get_int(main_obj, "clargs/part_dim");
     int vars_per_part = json_object_path_get_int(main_obj, "clargs/vars_per_part");
@@ -1095,9 +1102,7 @@ MACSIO_DATA_GenerateTimeZeroDumpObject(json_object *main_obj, int *rank_owning_c
     }
     else if (dim == 3)
     {
-        MACSIO_UTILS_Best3DFactors(total_num_parts, &nx_parts, &ny_parts, &nz_parts);
-        MACSIO_UTILS_Best3DFactors(part_size, &nx, &ny, &nz);
-        jpart_width = 1;
+           jpart_width = 1;
         kpart_width = 1;
     }
     MACSIO_UTILS_SetDims(part_dims, nx, ny, nz);

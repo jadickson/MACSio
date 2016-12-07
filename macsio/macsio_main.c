@@ -406,6 +406,11 @@ static json_object *ProcessCommandLine(int argc, char *argv[], int *plugin_argi)
             "curvilinear mesh it is the number of spatial dimensions and for\n"
             "unstructured mesh it is the number of spatial dimensions plus\n"
             "2^number of topological dimensions. [50]",
+        "--vis_part_size %d", MACSIO_CLARGS_NODEFAULT,
+            "Specify the part size of vis dumps if they are required for the simulation\n",
+        "--vis_to_check_ratio %d %d", MACSIO_CLARGS_NODEFAULT,
+            "If vis dumps are being used, specify the ratio of vis dumps to checkpoint\n"
+            "dumps. For example, 1 2 will perform a vis dump for every 2 checkpoints",
         "--topology_change_probability %f", "0.0",
             "The probability that the topology of the mesh (e.g. something fundamental\n"
             "about the mesh's structure) will change between dumps. A value of 1.0\n"
@@ -661,6 +666,39 @@ main_write(int argi, int argc, char **argv, json_object *main_obj)
     double min_dump_loop_start, max_dump_loop_end;
     int exercise_scr = JsonGetInt(main_obj, "clargs/exercise_scr");
     int sleep_time = JsonGetInt(main_obj, "clargs/sleep_time");
+
+    json_object *vis_obj = NULL;
+    
+    int vis_part = JsonGetInt(main_obj, "clargs/vis_part_size");
+    /* If a part size has been provided for vis, copy the main_obj args 
+     * to a vis object and replace part_size with vis_part_size. 
+     * This lets us reuse the problem generation methods for creating a vis object */
+    if (vis_part > 0){
+        vis_obj = json_object_new_object();
+        json_object *vis_problem_obj = MACSIO_DATA_GenerateTimeZeroDumpObject(main_obj,0);
+        json_object_object_add(vis_obj, "clargs", json_object_path_get_object(main_obj, "clargs"));
+        json_object_object_add(vis_obj, "parallel", json_object_path_get_object(main_obj, "parallel"));
+        json_object_object_add(vis_obj, "problem", vis_problem_obj);
+
+        if (MACSIO_LOG_DebugLevel >= 2)
+        {
+            char outfName[256];
+            FILE *outf;
+            int json_c_print_flags = JSON_C_TO_STRING_PRETTY | JSON_C_TO_STRING_SPACED;
+
+            if (MACSIO_LOG_DebugLevel < 3)
+                json_c_print_flags |= JSON_C_TO_STRING_NO_EXTARR_VALS;
+
+            snprintf(outfName, sizeof(outfName), "vis_obj_write_%03d.json", MACSIO_MAIN_Rank);
+            outf = fopen(outfName, "w");
+            fprintf(outf, "\"%s\"\n", json_object_to_json_string_ext(vis_obj, json_c_print_flags));
+            fclose(outf);
+        }
+
+        json_object_object_del(json_object_path_get_object(main_obj, "clargs"), "vis_part_size");
+    }
+    
+
     /* Sanity check args */
 
     /* Generate a static problem object to dump on each dump */
@@ -711,6 +749,20 @@ main_write(int argi, int argc, char **argv, json_object *main_obj)
         const MACSIO_IFACE_Handle_t *iface = MACSIO_IFACE_GetByName(
             json_object_path_get_string(main_obj, "clargs/interface"));
 
+        /* vis dump start */
+        if (vis_obj != NULL){
+            /* start timer for vis, given iteration number of 10xxx for hasing purposes*/
+            int visNum = 10000 + dumpNum;
+            MACSIO_TIMING_TimerId_t vis_dump_tid = MT_StartTimer("vis dump", main_wr_grp, visNum);
+            (*(iface->dumpFunc))(argi, argc, argv, vis_obj, visNum, dumpTime);
+#ifdef HAVE_MPI
+            mpi_errno = 0;
+#endif
+            errno = 0;
+            dt = MT_StopTimer(heavy_dump_tid);    
+        }
+        
+        
         /* log dump start */
 
         if (!exercise_scr || scr_need_checkpoint_flag)
