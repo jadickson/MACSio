@@ -751,7 +751,7 @@ main_write(int argi, int argc, char **argv, json_object *main_obj)
 
         /* vis dump start */
         if (vis_obj != NULL){
-            /* start timer for vis, given iteration number of 10xxx for hasing purposes*/
+            /* start timer for vis, given iteration number of 10xxx for hashing purposes*/
             int visNum = 10000 + dumpNum;
             MACSIO_TIMING_TimerId_t vis_dump_tid = MT_StartTimer("vis dump", main_wr_grp, visNum);
             (*(iface->dumpFunc))(argi, argc, argv, vis_obj, visNum, dumpTime);

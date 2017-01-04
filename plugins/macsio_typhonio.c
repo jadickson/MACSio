@@ -1094,7 +1094,7 @@ static void main_dump_sif(
 	TIO_File_t tiofile_id;
 	TIO_Object_t state_id, variable_id;
 	char *state_name = "state0";
-
+	char *date = (char*)getDate();
 	MPI_Info mpiInfo = MPI_INFO_NULL;
 
 	/* Construct name for the HDF5 file */
@@ -1103,15 +1103,19 @@ static void main_dump_sif(
 	        dumpn,
 	        "h5"); //json_object_path_get_string(main_obj, "clargs/fileext"));
 
-	char *date = (char*)getDate();
 
-	TIO_Call( TIO_Create(fileName, &tiofile_id, TIO_ACC_REPLACE, "MACSio",
-	                     "0.9", date, fileName, MACSIO_MAIN_Comm, MPI_INFO_NULL, MACSIO_MAIN_Rank),
-	          "File Creation Failed\n");
+    /* If checkpoint - create file.....
+     * If vis - open vis file and append....
+     */
+    int check = 1;
+    if (check == 1){
+        TIO_Call( TIO_Create(fileName, &tiofile_id, TIO_ACC_REPLACE, "MACSio",
+                    "0.9", date, fileName, MACSIO_MAIN_Comm, MPI_INFO_NULL, MACSIO_MAIN_Rank),
+                "File Creation Failed\n");
 
-	TIO_Call( TIO_Create_State(tiofile_id, state_name, &state_id, 1, (TIO_Time_t)0.0, "us"),
-	          "State Create Failed\n");
-
+        TIO_Call( TIO_Create_State(tiofile_id, state_name, &state_id, 1, (TIO_Time_t)0.0, "us"),
+                "State Create Failed\n");
+    }
 	json_object *part_array = json_object_path_get_array(main_obj, "problem/parts");
 	json_object *part_obj = json_object_array_get_idx(part_array, 0);
 	json_object *mesh_obj = json_object_path_get_object(part_obj, "Mesh");
