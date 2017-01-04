@@ -1093,27 +1093,45 @@ static void main_dump_sif(
 	char fileName[256];
 	TIO_File_t tiofile_id;
 	TIO_Object_t state_id, variable_id;
-	char *state_name = "state0";
-	char *date = (char*)getDate();
+	char state_name[16];
+    char *date = (char*)getDate();
 	MPI_Info mpiInfo = MPI_INFO_NULL;
 
+    int file_suffix;
+    if (dumpn < 10000){
+        file_suffix = dumpn;
+        sprintf(state_name, "state0");
+    } else {
+        file_suffix = 10000;
+    }
 	/* Construct name for the HDF5 file */
 	sprintf(fileName, "%s_typhonio_%03d.%s",
 	        json_object_path_get_string(main_obj, "clargs/filebase"),
-	        dumpn,
+	        file_suffix,
 	        "h5"); //json_object_path_get_string(main_obj, "clargs/fileext"));
 
 
     /* If checkpoint - create file.....
      * If vis - open vis file and append....
      */
-    int check = 1;
-    if (check == 1){
+    if (dumpn < 10000){
         TIO_Call( TIO_Create(fileName, &tiofile_id, TIO_ACC_REPLACE, "MACSio",
                     "0.9", date, fileName, MACSIO_MAIN_Comm, MPI_INFO_NULL, MACSIO_MAIN_Rank),
                 "File Creation Failed\n");
-
         TIO_Call( TIO_Create_State(tiofile_id, state_name, &state_id, 1, (TIO_Time_t)0.0, "us"),
+                "State Create Failed\n");
+    } else {
+        if (dumpn == 10000){
+            TIO_Call( TIO_Create(fileName, &tiofile_id, TIO_ACC_REPLACE, "MACSIO",
+                        "0.9", date, fileName, MACSIO_MAIN_Comm, MPI_INFO_NULL, MACSIO_MAIN_Rank),
+                    "Vis File Creation Failed\n");
+        } else {
+            TIO_Call( TIO_Open(fileName, &tiofile_id, TIO_ACC_READWRITE, "MACSio",
+                        "0.9", date, fileName, MACSIO_MAIN_Comm, MPI_INFO_NULL, MACSIO_MAIN_Rank),
+                    "File Open Failed\n");
+        }
+        sprintf(state_name, "state%d", (dumpn-10000));
+        TIO_Call( TIO_Create_State(tiofile_id, state_name, &state_id, (dumpn-10000), (TIO_Time_t)0.0, "us"),
                 "State Create Failed\n");
     }
 	json_object *part_array = json_object_path_get_array(main_obj, "problem/parts");

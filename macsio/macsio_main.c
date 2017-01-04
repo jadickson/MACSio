@@ -736,6 +736,7 @@ main_write(int argi, int argc, char **argv, json_object *main_obj)
     for (dumpNum = 0; dumpNum < json_object_path_get_int(main_obj, "clargs/num_dumps"); dumpNum++)
     {
         double dt;
+        int do_vis = 0;
         int scr_need_checkpoint_flag = 1;
         MACSIO_TIMING_TimerId_t heavy_dump_tid;
 
@@ -749,8 +750,11 @@ main_write(int argi, int argc, char **argv, json_object *main_obj)
         const MACSIO_IFACE_Handle_t *iface = MACSIO_IFACE_GetByName(
             json_object_path_get_string(main_obj, "clargs/interface"));
 
-        /* vis dump start */
         if (vis_obj != NULL){
+            do_vis = 1;
+        }
+        /* vis dump start */
+        if (do_vis){
             /* start timer for vis, given iteration number of 10xxx for hashing purposes*/
             int visNum = 10000 + dumpNum;
             MACSIO_TIMING_TimerId_t vis_dump_tid = MT_StartTimer("vis dump", main_wr_grp, visNum);
@@ -762,9 +766,7 @@ main_write(int argi, int argc, char **argv, json_object *main_obj)
             dt = MT_StopTimer(heavy_dump_tid);    
         }
         
-        
         /* log dump start */
-
         if (!exercise_scr || scr_need_checkpoint_flag)
         {
             int scr_valid = 0;
