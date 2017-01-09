@@ -444,7 +444,7 @@ static json_object *ProcessCommandLine(int argc, char *argv[], int *plugin_argi)
             "bytes.",
         "--num_dumps %d", "10",
             "Total number of dumps to marshal",
-	"--sleep_time %d", "0",
+	"--sleep_time %s", "0",
 	    "Time to wait between dumps",
         "--max_dir_size %d", MACSIO_CLARGS_NODEFAULT,
             "The maximum number of filesystem objects (e.g. files or subdirectories)\n"
@@ -665,7 +665,7 @@ main_write(int argi, int argc, char **argv, json_object *main_obj)
     double dump_loop_start, dump_loop_end;
     double min_dump_loop_start, max_dump_loop_end;
     int exercise_scr = JsonGetInt(main_obj, "clargs/exercise_scr");
-    int sleep_time = JsonGetInt(main_obj, "clargs/sleep_time");
+    //int sleep_time = JsonGetInt(main_obj, "clargs/sleep_time");
 
     json_object *vis_obj = NULL;
     
@@ -710,7 +710,12 @@ main_write(int argi, int argc, char **argv, json_object *main_obj)
 
     /* Attempt to read the dataset modifier array from file */
     double *modifier_array;
-    int sequence_length = get_modifier_array(&modifier_array,(char*)json_object_path_get_string(main_obj, "clargs/data_mutate_sequence"));
+    int modifier_sequence_length = get_modifier_array(&modifier_array,(char*)json_object_path_get_string(main_obj, "clargs/data_mutate_sequence"));
+
+    double *sleep_array;
+    int sleep_sequence_length = get_modifier_array(&sleep_array,(char*)json_object_path_get_string(main_obj, "clargs/sleep_time"));
+
+    
 
     /* Just here for debugging for the moment */
     if (MACSIO_LOG_DebugLevel >= 2)
@@ -803,7 +808,7 @@ main_write(int argi, int argc, char **argv, json_object *main_obj)
     
         //int dataset_mutation = 1;
     	/* change dataset size if mutation is used */
-    	if (dumpNum < sequence_length){
+    	if (dumpNum < modifier_sequence_length){
             json_object *mutated_object = MACSIO_DATA_MutateDataset(main_obj, modifier_array, dumpNum);
             main_obj = mutated_object;
         }
@@ -815,9 +820,9 @@ main_write(int argi, int argc, char **argv, json_object *main_obj)
             MU_PrBW(problem_nbytes, dt, 0, bandwidth_str, sizeof(bandwidth_str))));
 #warning IS THIS A GOOD WAY OF SLEEPING? SHOULD THERE BE SOME COMPUTE
         /*SLEEP*/
-        if  (sleep_time > 0 && dumpNum < json_object_path_get_int(main_obj, "clargs/num_dumps")){
+        if  ((dumpNum < sleep_sequence_length)){ //&& dumpNum < json_object_path_get_int(main_obj, "clargs/num_dumps")){
             struct timespec tim, tim2;
-            tim.tv_sec = sleep_time;
+            tim.tv_sec = sleep_array[dumpNum];
             tim.tv_nsec = 0;
             nanosleep(&tim, &tim2);
         }
@@ -825,7 +830,7 @@ main_write(int argi, int argc, char **argv, json_object *main_obj)
 
     dump_loop_end = MT_Time();
 
-    if (sequence_length > 0)
+    if (modifier_sequence_length > 0)
         free(modifier_array);
 
     MACSIO_LOG_MSG(Info, ("Overall BW: %s/%s = %s",
