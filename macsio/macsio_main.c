@@ -768,7 +768,7 @@ main_write(int argi, int argc, char **argv, json_object *main_obj)
             mpi_errno = 0;
 #endif
             errno = 0;
-            dt = MT_StopTimer(heavy_dump_tid);    
+            dt = MT_StopTimer(vis_dump_tid);    
         }
         
         /* log dump start */
