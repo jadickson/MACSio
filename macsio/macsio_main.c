@@ -408,9 +408,9 @@ static json_object *ProcessCommandLine(int argc, char *argv[], int *plugin_argi)
             "2^number of topological dimensions. [50]",
         "--vis_part_size %d", MACSIO_CLARGS_NODEFAULT,
             "Specify the part size of vis dumps if they are required for the simulation\n",
-        "--vis_to_check_ratio %d %d", MACSIO_CLARGS_NODEFAULT,
+        "--checkpoint_vis_ratio %d", MACSIO_CLARGS_NODEFAULT,
             "If vis dumps are being used, specify the ratio of vis dumps to checkpoint\n"
-            "dumps. For example, 1 2 will perform a vis dump for every 2 checkpoints",
+            "dumps. For example, 2 will perform a vis dump before every other checkpoint.\n",
         "--topology_change_probability %f", "0.0",
             "The probability that the topology of the mesh (e.g. something fundamental\n"
             "about the mesh's structure) will change between dumps. A value of 1.0\n"
@@ -733,6 +733,11 @@ main_write(int argi, int argc, char **argv, json_object *main_obj)
         fclose(outf);
     }
 
+    /* need to control the ratio of vis to checkpoint writes */
+    int vis_freq = json_object_path_get_int(main_obj, "clargs/checkpoint_vis_ratio") > 1 ? 
+        json_object_path_get_int(main_obj,"clargs/checkpoint_vis_ratio") : 1;
+    int total_dumps = json_object_path_get_int(main_obj, "clargs/num_dumps");
+
 #warning WERE NOT GENERATING OR WRITING ANY METADATA STUFF
 
 #warning MAKE THIS LOOP MORE LIKE A MAIN SIM LOOP WITH SIMPLE COMPUTE AND COMM STEP
@@ -755,7 +760,8 @@ main_write(int argi, int argc, char **argv, json_object *main_obj)
         const MACSIO_IFACE_Handle_t *iface = MACSIO_IFACE_GetByName(
             json_object_path_get_string(main_obj, "clargs/interface"));
 
-        if (vis_obj != NULL){
+
+        if ((vis_obj != NULL) && (dumpNum % vis_freq == 0)){
             do_vis = 1;
         }
         /* vis dump start */
