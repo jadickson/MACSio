@@ -675,6 +675,7 @@ main_write(int argi, int argc, char **argv, json_object *main_obj)
      * This lets us reuse the problem generation methods for creating a vis object */
     if (vis_part > 0){
         vis_obj = json_object_new_object();
+        json_object_object_add(json_object_path_get_object(main_obj, "clargs"), "file_type", json_object_new_string("vis"));
         json_object *vis_problem_obj = MACSIO_DATA_GenerateTimeZeroDumpObject(main_obj,0);
         json_object_object_add(vis_obj, "clargs", json_object_path_get_object(main_obj, "clargs"));
         json_object_object_add(vis_obj, "parallel", json_object_path_get_object(main_obj, "parallel"));
@@ -695,13 +696,14 @@ main_write(int argi, int argc, char **argv, json_object *main_obj)
             fclose(outf);
         }
 
-        json_object_object_del(json_object_path_get_object(main_obj, "clargs"), "vis_part_size");
     }
     
 
     /* Sanity check args */
 
     /* Generate a static problem object to dump on each dump */
+    
+    json_object_object_add(json_object_path_get_object(main_obj, "clargs"), "file_type", json_object_new_string("checkpoint"));
     json_object *problem_obj = MACSIO_DATA_GenerateTimeZeroDumpObject(main_obj,0);
     problem_nbytes = (unsigned long long) json_object_object_nbytes(problem_obj, JSON_C_FALSE);
 
@@ -815,8 +817,14 @@ main_write(int argi, int argc, char **argv, json_object *main_obj)
         //int dataset_mutation = 1;
     	/* change dataset size if mutation is used */
     	if (dumpNum < modifier_sequence_length){
+            json_object_object_add(json_object_path_get_object(main_obj, "clargs"), "file_type", json_object_new_string("checkpoint"));
             json_object *mutated_object = MACSIO_DATA_MutateDataset(main_obj, modifier_array, dumpNum);
             main_obj = mutated_object;
+            if (vis_obj != NULL){
+                json_object_object_add(json_object_path_get_object(main_obj, "clargs"), "file_type", json_object_new_string("vis"));
+                json_object *mutated_vis_object = MACSIO_DATA_MutateDataset(vis_obj, modifier_array, dumpNum);
+                vis_obj = mutated_vis_object;
+            }
         }
 
         /* log dump timing */

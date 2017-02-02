@@ -1062,14 +1062,12 @@ MACSIO_DATA_GenerateTimeZeroDumpObject(json_object *main_obj, int *rank_owning_c
     json_object *global_obj = rank_owning_chunkId?0:json_object_new_object();
     json_object *part_array = rank_owning_chunkId?0:json_object_new_array();
     int size = json_object_path_get_int(main_obj, "parallel/mpi_size");
-    int vis_part_size = json_object_path_get_int(main_obj, "clargs/vis_part_size") / sizeof(double);
     int part_size;
-    if (vis_part_size){
-        part_size = vis_part_size;
-    }else{
+    if (!strcmp(json_object_path_get_string(main_obj, "clargs/file_type"),"checkpoint")){
         part_size = json_object_path_get_int(main_obj, "clargs/part_size") / sizeof(double);
+    } else {
+        part_size = json_object_path_get_int(main_obj, "clargs/vis_part_size") / sizeof(double);
     }
-
     double avg_num_parts = json_object_path_get_double(main_obj, "clargs/avg_num_parts");
     int dim = json_object_path_get_int(main_obj, "clargs/part_dim");
     int vars_per_part = json_object_path_get_int(main_obj, "clargs/vars_per_part");
@@ -1200,8 +1198,13 @@ MACSIO_DATA_MutateDataset(json_object *main_obj, double *mutateSequence, int dum
     json_object *clargs_obj = json_object_path_get_object(main_obj, "clargs");
 
     // Increase part sizes by the factor given in modifier sequence 
-    int doubled_part_size = json_object_path_get_int(main_obj,"clargs/part_size") * mutateSequence[dumpNum];
-    json_object_object_add(clargs_obj, "part_size", json_object_new_int(doubled_part_size));
+    if (!strcmp(json_object_path_get_string(main_obj, "clargs/file_type"),"checkpoint")){
+        int doubled_part_size = json_object_path_get_int(main_obj,"clargs/part_size") * mutateSequence[dumpNum];
+        json_object_object_add(clargs_obj, "part_size", json_object_new_int(doubled_part_size));
+    } else {
+        int doubled_part_size = json_object_path_get_int(main_obj,"clargs/vis_part_size)") * mutateSequence[dumpNum];
+        json_object_object_add(clargs_obj, "vis_part_size", json_object_new_int(doubled_part_size));
+    }
 
     // Add modified clargs object and original parallel object to a new main json object
     // The problem data is generated from handing off to the generate method
