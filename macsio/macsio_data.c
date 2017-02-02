@@ -1202,7 +1202,7 @@ MACSIO_DATA_MutateDataset(json_object *main_obj, double *mutateSequence, int dum
         int doubled_part_size = json_object_path_get_int(main_obj,"clargs/part_size") * mutateSequence[dumpNum];
         json_object_object_add(clargs_obj, "part_size", json_object_new_int(doubled_part_size));
     } else {
-        int doubled_part_size = json_object_path_get_int(main_obj,"clargs/vis_part_size)") * mutateSequence[dumpNum];
+        int doubled_part_size = json_object_path_get_int(main_obj,"clargs/vis_part_size") * mutateSequence[dumpNum];
         json_object_object_add(clargs_obj, "vis_part_size", json_object_new_int(doubled_part_size));
     }
 
