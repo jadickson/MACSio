@@ -112,9 +112,14 @@ int MACSIO_UTILS_Best2DFactors(
     {
         if (!(val % root))
         {
-            *x = root;
-            *y = val / root;
-            return 0;
+            if (root > 1){
+                *x = root;
+                *y = val / root;
+                return 0;
+            } else {
+                val +=1;
+                root = (int) sqrt((double)val);
+            }
         }
         root--;
     }
