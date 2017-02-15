@@ -112,7 +112,8 @@ int MACSIO_UTILS_Best2DFactors(
     {
         if (!(val % root))
         {
-            if (root > 1){
+            /* This function has been changed to try and eliminate unbalanced factorization from primes and other awkward numbers. It hasn't been stress tested, more of a quick fix */
+            if ((root > 2) || (val < 16){
                 *x = root;
                 *y = val / root;
                 return 0;
