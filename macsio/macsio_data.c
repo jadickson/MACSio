@@ -1189,21 +1189,21 @@ int MACSIO_DATA_SimpleAssignKPartsToNProcs(int k, int n, int my_rank, int *my_pa
 }
 
 json_object *
-MACSIO_DATA_MutateDataset(json_object *main_obj, double *mutateSequence, int dumpNum)
+MACSIO_DATA_MutateDataset(json_object *main_obj, double modifier)
 {
     // If the modifier is 1 then nothing changes so just pass the object back
-    if (mutateSequence[dumpNum] == 1.0) return main_obj;
+    if (modifier == 1.0) return main_obj;
 
     // Extract the clargs object from the main json object and overwrite the problem description parameters 
     json_object *clargs_obj = json_object_path_get_object(main_obj, "clargs");
 
     // Increase part sizes by the factor given in modifier sequence 
     if (!strcmp(json_object_path_get_string(main_obj, "clargs/file_type"),"checkpoint")){
-        int doubled_part_size = json_object_path_get_int(main_obj,"clargs/part_size") * mutateSequence[dumpNum];
-        json_object_object_add(clargs_obj, "part_size", json_object_new_int(doubled_part_size));
+        int modified_part_size = json_object_path_get_int(main_obj,"clargs/part_size") * modifier;
+        json_object_object_add(clargs_obj, "part_size", json_object_new_int(modified_part_size));
     } else {
-        int doubled_part_size = json_object_path_get_int(main_obj,"clargs/vis_part_size") * mutateSequence[dumpNum];
-        json_object_object_add(clargs_obj, "vis_part_size", json_object_new_int(doubled_part_size));
+        int modified_part_size = json_object_path_get_int(main_obj,"clargs/vis_part_size") * modifier;
+        json_object_object_add(clargs_obj, "vis_part_size", json_object_new_int(modified_part_size));
     }
 
     // Add modified clargs object and original parallel object to a new main json object

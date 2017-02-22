@@ -1124,7 +1124,7 @@ static void main_dump_sif(
         if (dumpn == 10000){
             TIO_Call( TIO_Create(fileName, &tiofile_id, TIO_ACC_REPLACE, "MACSIO",
                         "0.9", date, fileName, MACSIO_MAIN_Comm, MPI_INFO_NULL, MACSIO_MAIN_Rank),
-                    "Vis File Creation Failed\n");
+                    "Plot File Creation Failed\n");
         } else {
             TIO_Call( TIO_Open(fileName, &tiofile_id, TIO_ACC_READWRITE, "MACSio",
                         "0.9", date, fileName, MACSIO_MAIN_Comm, MPI_INFO_NULL, MACSIO_MAIN_Rank),

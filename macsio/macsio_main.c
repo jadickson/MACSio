@@ -711,10 +711,6 @@ main_write(int argi, int argc, char **argv, json_object *main_obj)
 #warning MAKE JSON OBJECT KEY CASE CONSISTENT
     json_object_object_add(main_obj, "problem", problem_obj);
 
-    /* Attempt to read the dataset growth  array from file */
-    double *data_growth_array;
-    int growth_sequence_length = get_sequence_array(&data_growth_array,(char*)json_object_path_get_string(main_obj, "clargs/data_growth_sequence"));
-
     /* Just here for debugging for the moment */
     if (MACSIO_LOG_DebugLevel >= 2)
     {
@@ -759,6 +755,12 @@ main_write(int argi, int argc, char **argv, json_object *main_obj)
         seconds_per_dt = sleep_array[0]/checkFrequency;
     }
 
+    /* Attempt to read the dataset growth  array from file */
+    double *data_growth_array;
+    int growth_sequence_length = get_sequence_array(&data_growth_array,(char*)json_object_path_get_string(main_obj, "clargs/data_growth_sequence"));
+
+    double plot_growth = 1; 
+
     const MACSIO_IFACE_Handle_t *iface = MACSIO_IFACE_GetByName(
             json_object_path_get_string(main_obj, "clargs/interface"));
 
@@ -773,7 +775,7 @@ main_write(int argi, int argc, char **argv, json_object *main_obj)
         if (exercise_scr)
             SCR_Need_checkpoint(&scr_need_checkpoint_flag);
 #endif
-
+        /* performs a checkpoint dump if the timestep matches the checkpoint frequency and the timestep is not 0 */
         if ( ((checkFrequency > 0) && (timestep%checkFrequency==0) && (timestep!=0)) || scr_need_checkpoint_flag ){
 #ifdef HAVE_SCR
             int scr_valid = 0;
@@ -808,13 +810,15 @@ main_write(int argi, int argc, char **argv, json_object *main_obj)
                         MU_PrSecs(dt, 0, seconds_str, sizeof(seconds_str)),
                         MU_PrBW(problem_nbytes, dt, 0, bandwidth_str, sizeof(bandwidth_str))));
 
-
+            /* grow the size of the checkpoint dataset if a growth sequence has been given */
             if ((growth_sequence_length>0) && (checkpointNum < growth_sequence_length)){ 
                 json_object_object_add(json_object_path_get_object(main_obj, "clargs"), "file_type", json_object_new_string("checkpoint"));
-                json_object *mutated_object = MACSIO_DATA_MutateDataset(main_obj, data_growth_array, checkpointNum);
+                json_object *mutated_object = MACSIO_DATA_MutateDataset(main_obj, data_growth_array[checkpointNum]);
                 main_obj = mutated_object;
+                plot_growth *= data_growth_array[checkpointNum];
             }
 
+            /* adjust the amount of time taken for the timestep to advance if a sleep modifier is specified */
             if ((sleep_sequence_length > 0) && (checkpointNum < sleep_sequence_length)){
                 seconds_per_dt = sleep_array[checkpointNum]/checkFrequency;
             }
@@ -830,21 +834,24 @@ main_write(int argi, int argc, char **argv, json_object *main_obj)
             errno = 0;
             dt = MT_StopTimer(dump_tid);    
 
-            if ((growth_sequence_length>0) && (checkpointNum < growth_sequence_length)){
+            /* grow the size of the plot dataset if a growth sequence has been given */
+            if ( plot_growth != 1.0){
                 json_object_object_add(json_object_path_get_object(main_obj, "clargs"), "file_type", json_object_new_string("plot"));
-                json_object *mutated_plot_object = MACSIO_DATA_MutateDataset(plot_obj, data_growth_array, checkpointNum);
+                json_object *mutated_plot_object = MACSIO_DATA_MutateDataset(plot_obj, plot_growth);
                 plot_obj = mutated_plot_object;
+                plot_growth = 1.0;
             }
             plotNum++;
 
         }
 
-        /*SLEEP*/
+        /* sleep for the time set in seconds_per_dt */
         struct timespec tim, tim2;
         tim.tv_sec = seconds_per_dt;
         tim.tv_nsec = 0;
         nanosleep(&tim, &tim2);
 
+        /* advance the loop timestep */
         timestep += timestep_dt;
     }
 
