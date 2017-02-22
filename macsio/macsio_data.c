@@ -1066,7 +1066,7 @@ MACSIO_DATA_GenerateTimeZeroDumpObject(json_object *main_obj, int *rank_owning_c
     if (!strcmp(json_object_path_get_string(main_obj, "clargs/file_type"),"checkpoint")){
         part_size = json_object_path_get_int(main_obj, "clargs/part_size") / sizeof(double);
     } else {
-        part_size = json_object_path_get_int(main_obj, "clargs/vis_part_size") / sizeof(double);
+        part_size = json_object_path_get_int(main_obj, "clargs/plot_part_size") / sizeof(double);
     }
     double avg_num_parts = json_object_path_get_double(main_obj, "clargs/avg_num_parts");
     int dim = json_object_path_get_int(main_obj, "clargs/part_dim");
@@ -1202,8 +1202,8 @@ MACSIO_DATA_MutateDataset(json_object *main_obj, double modifier)
         int modified_part_size = json_object_path_get_int(main_obj,"clargs/part_size") * modifier;
         json_object_object_add(clargs_obj, "part_size", json_object_new_int(modified_part_size));
     } else {
-        int modified_part_size = json_object_path_get_int(main_obj,"clargs/vis_part_size") * modifier;
-        json_object_object_add(clargs_obj, "vis_part_size", json_object_new_int(modified_part_size));
+        int modified_part_size = json_object_path_get_int(main_obj,"clargs/plot_part_size") * modifier;
+        json_object_object_add(clargs_obj, "plot_part_size", json_object_new_int(modified_part_size));
     }
 
     // Add modified clargs object and original parallel object to a new main json object
