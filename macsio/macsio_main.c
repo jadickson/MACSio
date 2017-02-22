@@ -1,28 +1,28 @@
 /*
-Copyright (c) 2015, Lawrence Livermore National Security, LLC.
-Produced at the Lawrence Livermore National Laboratory.
-Written by Mark C. Miller
+   Copyright (c) 2015, Lawrence Livermore National Security, LLC.
+   Produced at the Lawrence Livermore National Laboratory.
+   Written by Mark C. Miller
 
-LLNL-CODE-676051. All rights reserved.
+   LLNL-CODE-676051. All rights reserved.
 
-This file is part of MACSio
+   This file is part of MACSio
 
-Please also read the LICENSE file at the top of the source code directory or
-folder hierarchy.
+   Please also read the LICENSE file at the top of the source code directory or
+   folder hierarchy.
 
-This program is free software; you can redistribute it and/or modify it under
-the terms of the GNU General Public License (as published by the Free Software
-Foundation) version 2, dated June 1991.
+   This program is free software; you can redistribute it and/or modify it under
+   the terms of the GNU General Public License (as published by the Free Software
+   Foundation) version 2, dated June 1991.
 
-This program is distributed in the hope that it will be useful, but WITHOUT
-ANY WARRANTY; without even the IMPLIED WARRANTY OF MERCHANTABILITY or FITNESS
-FOR A PARTICULAR PURPOSE. See the terms and conditions of the GNU General
-Public License for more details.
+   This program is distributed in the hope that it will be useful, but WITHOUT
+   ANY WARRANTY; without even the IMPLIED WARRANTY OF MERCHANTABILITY or FITNESS
+   FOR A PARTICULAR PURPOSE. See the terms and conditions of the GNU General
+   Public License for more details.
 
-You should have received a copy of the GNU General Public License along with
-this program; if not, write to the Free Software Foundation, Inc., 59 Temple
-Place, Suite 330, Boston, MA 02111-1307 USA
-*/
+   You should have received a copy of the GNU General Public License along with
+   this program; if not, write to the Free Software Foundation, Inc., 59 Temple
+   Place, Suite 330, Boston, MA 02111-1307 USA
+   */
 
 #include <errno.h>
 #include <float.h>
@@ -101,7 +101,7 @@ extern "C" {
  * finds an N dimensional arrangement (N=[1,2,3]) of the pieces that is as close to equal dimension as possible.
  * If mesh piece size or total count of pieces wind up being prime numbers, MACSio will only be able to factor
  * these into long, narrow shapes where 2 (or 3) of the dimensions are of size 1. That will make examination of
- * the resulting data using visualization tools like VisIt a little less convenient but is otherwise harmless
+ * the resulting data using visualization tools like visIt a little less convenient but is otherwise harmless
  * from the perspective of driving and assessing I/O performance.
  *
  * Once the global whole mesh shape is determined as a count of total pieces and as counts of pieces in each
@@ -131,146 +131,146 @@ extern "C" {
  *
  * \subsection sec_building_main Building MACSio Main
  *
- * The main bootstrap for building MACSio is the \em config-site file. This file contains variable
- * definitions for all the key Make variables necessary to control the build of MACSio and any of
- * its plugins. Here is an example config-site file...
- *
- * \code
+* The main bootstrap for building MACSio is the \em config-site file. This file contains variable
+* definitions for all the key Make variables necessary to control the build of MACSio and any of
+* its plugins. Here is an example config-site file...
+*
+* \code
 SILO_HOME = /Users/miller86/visit/visit/silo/4.10.2-h5par/i386-apple-darwin12_gcc-4.2
-HDF5_HOME = /Users/miller86/visit/visit/hdf5/1.8.11-par/i386-apple-darwin12_gcc-4.2
+    HDF5_HOME = /Users/miller86/visit/visit/hdf5/1.8.11-par/i386-apple-darwin12_gcc-4.2
 ZFP_HOME  = $(HDF5_HOME)
-EXODUS_HOME = /Users/miller86/Downloads/exodus-6.09/exodus/myinstall
-NETCDF_HOME = /Users/miller86/visit/thirdparty_shared/2.8/netcdf/4.3.2/i386-apple-darwin12_gcc-4.2
-CXX = /Users/miller86/installs/openmpi/1.6.4/i386-apple-darwin12_gcc-4.2/bin/mpicxx
-CC  = /Users/miller86/installs/openmpi/1.6.4/i386-apple-darwin12_gcc-4.2/bin/mpicc
-CFLAGS = -DHAVE_MPI -g
+    EXODUS_HOME = /Users/miller86/Downloads/exodus-6.09/exodus/myinstall
+    NETCDF_HOME = /Users/miller86/visit/thirdparty_shared/2.8/netcdf/4.3.2/i386-apple-darwin12_gcc-4.2
+    CXX = /Users/miller86/installs/openmpi/1.6.4/i386-apple-darwin12_gcc-4.2/bin/mpicxx
+    CC  = /Users/miller86/installs/openmpi/1.6.4/i386-apple-darwin12_gcc-4.2/bin/mpicc
+    CFLAGS = -DHAVE_MPI -g
 LINK = $(CXX)
- * \endcode
- *
- * Note that all package \c FOO_HOME make variables are treated as specifying a top-level
- * package directory underneath which lives \c include and \c lib directories for the
- * package header files and library files respectively. If you have a package that does not
- * install or is not installed in this industry standard way, a work-around is to use symlinks
- * or explicit copies to create some \em proxy home directory for the package that is
- * structured in the way MACSio's Makefiles expect it.
- *
- * Ordinarily, we maintain separate config-site files for various hosts upon which MACSio is
- * built. The files are named according to the build host they are associated with. However,
- * it is also perfectly fine to maintain, for example, a config-site file for a generic host
- * such as \em ubuntu and then just explicitly reference that config-site file when building
- * MACSio on ubuntu systems.
- *
- * Although MACSio is C Language, at a minimum it must be linked using a C++ linker due to
- * its use of non-constant expressions in static initializers to affect the static plugin
- * behavior. However, its conceivable that some C++'isms have crept into the code causing
- * warnings or outright errors with some C compilers.
- *
- * In addition, MACSio sources currently include a large number of \c \#warning statements
- * to help remind developers (namely me) of minor issues to be fixed. When compiling, these
- * produce a lot of sprurios output in stderr but are otherwise harmless.
- *
- * From within the \c macsio sub-directory, these make targets are defined...
- *   - <tt>make all</tt>: will build all of MACSio main + all plugins that have been enabled
- *     via setting non-null values for their respective TPL(s) \c FOO_HOME variables in the
- *     config-site file.
- *   - <tt>make CONFIG_SITE_FILE=config-site/foo all</tt>: will build all of MACSio main + plugins
- *     using the specified config-site file, \c config-site/foo.
- *   - <tt>make clean</tt>: will clean away main and plugin object files.
- *   - <tt>make dataclean</tt>: will clean away data files MACSio has produced.
- *   - <tt>make allclean</tt>: will clean away all test data files, main and plugin object files,
- *     and the macsio executable.
- *
- * Note that part of building MACSio's main includes building the \ref jsonclib. The JSON-C
- * library is configured and installed from the Makefile in the \c macsio sub-directory but
- * it is actually installed one directory level up in \c ../json-cwx/install.
- * Whenever the JSON-C library is modified, it is necessary to re-install it and in that case
- * requires one to manually cd to the \c ../json-cwx/build directory and
- * issue the command <tt>make install</tt> there.
- *
- * \subsection sec_building_plugins Building MACSio Plugins
- *
- * By default, the only plugin(s) MACSio builds with automatically are those that depend upon
- * ubiquitous system libraries such as stdio. In the initial release of MACSio, the only plugin
- * that operates directly on system I/O interfaces is the raw-posix (miftmpl) plugin.
- *
- * Other plugins require associated third party libraries (TPLs). Consequently, before building
- * MACSio, one must have installed the associated TPLs for the desired plugins.
- *
- * Here are some useful make targets defined for the \c plugins directory to help with plugin
- * TPL(s).
- *   - <tt>make list</tt>: lists all plugins for which source code exists in
- *     the \c plugins directory.
- *   - <tt>make list-tpls-X</tt>: lists all TPL(s) required for plugin X as well as
- *     their last known URLs.
- *   - <tt>make download-tpls-X</tt>: downloads (using either wget or curl) all TPL(s)
- *     tarballs needed for plugin X.
- *   - <tt>make install-tpls-X</tt>: will attempt to build and install all TPL(s)
- *     for a given plugin to path specified in \c MACSIO_TPLS_PREFIX. (note: this
- *     is currently an unreliable option).
- *
- * All essential make bootstraps can be set in a hostname-specific config-site file
- * or by explicitly specifing a config-site file to be used using the \c CONFIG_SITE_FILE
- * make variable (e.g. <tt>make CONFIG_SITE_FILE=config-site/foo</tt> will build using
- * the contents of the file \c foo in the \c config-site directory.
- *
- * A given plugin is built only when installations of its needed TPL(s) are specified
- * via its associated \c FOO_HOME variable. For example, to build the HDF5 plugin, the
- * variable \c HDF5_HOME must specify a path to an installation of HDF5 where the
- * \c include and \c lib sub-directories for HDF5 can be found.
- *
- * Sometimes it is desireable to build only some of the available plugins. This can be
- * achieved using the make variable \c ENABLE_PLUGINS setting it to a space separated
- * string of the names of the plugins to include when linking the MACSio main executable.
- * For example, the command <tt>make ENABLE_PLUGINS="miftmpl silo" all</tt> will build the
- * MACSio executable so that only the miftmpl and Silo plugins are included.
- *
- * Each plugin is defined by two files named such as \c macsio_foo.make and \c macsio_foo.c
- * for a plugin named foo. \c macsio_foo.c implements the \c MACSIO_IFACE interface for the
- * foo plugin. \c macsio_foo.make is a makefile fragment, that gets included in the
- * main Makefile in the \c plugins directory, to manage the creation of \c macsio_foo.o
- * object file.
- *
- * Given the high likelihood that different plugins may depend on common TPL(s), there is
- * a plugin-specific make variable, \c FOO_BUILD_ORDER (for a fictitious foo plugin) that
- * informs MACSio's make system of the order in which to build the plugin relative to other
- * plugins. The \c FOO_BUILD_ORDER variable is a floating point number that is used to sort
- * the order in which plugin's object files appear on the link line when linking MACSio. A higher
- * numerical value for the \c FOO_BUILD_ORDER variable will result in the \c foo plugin
- * and its dependent libraries occuring later on the link command-line.
- *
- * MACSio does not use \c dlopen() to manage plugins. Instead, MACSio uses a \em static approach
- * to managing plugins. The set of plugins available in a \c macsio executable is determined at
- * the time the executable is linked simply by listing all the plugin object files to be linked
- * into the executable (along with their associated TPL(s)). MACSio exploits a feature in C++
- * which permits initialization of static variables via non-constant expressions. All symbols in
- * a plugin are defined with \c static scope. Every plugin defines an <tt>int registration(void)</tt>
- * function and initializes a static dummy integer to the result of \c registration() like so...
- *
- * \code
-   static int register_this_interface(void)
-   {
-     MACSIO_IFACE_Handle_t iface;
+    * \endcode
+    *
+    * Note that all package \c FOO_HOME make variables are treated as specifying a top-level
+    * package directory underneath which lives \c include and \c lib directories for the
+    * package header files and library files respectively. If you have a package that does not
+    * install or is not installed in this industry standard way, a work-around is to use symlinks
+    * or explicit copies to create some \em proxy home directory for the package that is
+    * structured in the way MACSio's Makefiles expect it.
+    *
+    * Ordinarily, we maintain separate config-site files for various hosts upon which MACSio is
+    * built. The files are named according to the build host they are associated with. However,
+    * it is also perfectly fine to maintain, for example, a config-site file for a generic host
+    * such as \em ubuntu and then just explicitly reference that config-site file when building
+    * MACSio on ubuntu systems.
+    *
+    * Although MACSio is C Language, at a minimum it must be linked using a C++ linker due to
+    * its use of non-constant expressions in static initializers to affect the static plugin
+    * behavior. However, its conceivable that some C++'isms have crept into the code causing
+    * warnings or outright errors with some C compilers.
+    *
+    * In addition, MACSio sources currently include a large number of \c \#warning statements
+    * to help remind developers (namely me) of minor issues to be fixed. When compiling, these
+    * produce a lot of sprurios output in stderr but are otherwise harmless.
+    *
+    * From within the \c macsio sub-directory, these make targets are defined...
+    *   - <tt>make all</tt>: will build all of MACSio main + all plugins that have been enabled
+    *     via setting non-null values for their respective TPL(s) \c FOO_HOME variables in the
+    *     config-site file.
+    *   - <tt>make CONFIG_SITE_FILE=config-site/foo all</tt>: will build all of MACSio main + plugins
+    *     using the specified config-site file, \c config-site/foo.
+    *   - <tt>make clean</tt>: will clean away main and plugin object files.
+    *   - <tt>make dataclean</tt>: will clean away data files MACSio has produced.
+    *   - <tt>make allclean</tt>: will clean away all test data files, main and plugin object files,
+    *     and the macsio executable.
+    *
+    * Note that part of building MACSio's main includes building the \ref jsonclib. The JSON-C
+    * library is configured and installed from the Makefile in the \c macsio sub-directory but
+    * it is actually installed one directory level up in \c ../json-cwx/install.
+    * Whenever the JSON-C library is modified, it is necessary to re-install it and in that case
+    * requires one to manually cd to the \c ../json-cwx/build directory and
+    * issue the command <tt>make install</tt> there.
+    *
+    * \subsection sec_building_plugins Building MACSio Plugins
+    *
+    * By default, the only plugin(s) MACSio builds with automatically are those that depend upon
+    * ubiquitous system libraries such as stdio. In the initial release of MACSio, the only plugin
+    * that operates directly on system I/O interfaces is the raw-posix (miftmpl) plugin.
+    *
+    * Other plugins require associated third party libraries (TPLs). Consequently, before building
+    * MACSio, one must have installed the associated TPLs for the desired plugins.
+    *
+    * Here are some useful make targets defined for the \c plugins directory to help with plugin
+    * TPL(s).
+    *   - <tt>make list</tt>: lists all plugins for which source code exists in
+    *     the \c plugins directory.
+    *   - <tt>make list-tpls-X</tt>: lists all TPL(s) required for plugin X as well as
+    *     their last known URLs.
+*   - <tt>make download-tpls-X</tt>: downloads (using either wget or curl) all TPL(s)
+    *     tarballs needed for plugin X.
+*   - <tt>make install-tpls-X</tt>: will attempt to build and install all TPL(s)
+    *     for a given plugin to path specified in \c MACSIO_TPLS_PREFIX. (note: this
+            *     is currently an unreliable option).
+    *
+    * All essential make bootstraps can be set in a hostname-specific config-site file
+    * or by explicitly specifing a config-site file to be used using the \c CONFIG_SITE_FILE
+    * make variable (e.g. <tt>make CONFIG_SITE_FILE=config-site/foo</tt> will build using
+            * the contents of the file \c foo in the \c config-site directory.
+            *
+            * A given plugin is built only when installations of its needed TPL(s) are specified
+            * via its associated \c FOO_HOME variable. For example, to build the HDF5 plugin, the
+            * variable \c HDF5_HOME must specify a path to an installation of HDF5 where the
+            * \c include and \c lib sub-directories for HDF5 can be found.
+            *
+            * Sometimes it is desireable to build only some of the available plugins. This can be
+            * achieved using the make variable \c ENABLE_PLUGINS setting it to a space separated
+            * string of the names of the plugins to include when linking the MACSio main executable.
+            * For example, the command <tt>make ENABLE_PLUGINS="miftmpl silo" all</tt> will build the
+            * MACSio executable so that only the miftmpl and Silo plugins are included.
+            *
+            * Each plugin is defined by two files named such as \c macsio_foo.make and \c macsio_foo.c
+            * for a plugin named foo. \c macsio_foo.c implements the \c MACSIO_IFACE interface for the
+            * foo plugin. \c macsio_foo.make is a makefile fragment, that gets included in the
+            * main Makefile in the \c plugins directory, to manage the creation of \c macsio_foo.o
+            * object file.
+            *
+            * Given the high likelihood that different plugins may depend on common TPL(s), there is
+    * a plugin-specific make variable, \c FOO_BUILD_ORDER (for a fictitious foo plugin) that
+    * informs MACSio's make system of the order in which to build the plugin relative to other
+    * plugins. The \c FOO_BUILD_ORDER variable is a floating point number that is used to sort
+    * the order in which plugin's object files appear on the link line when linking MACSio. A higher
+    * numerical value for the \c FOO_BUILD_ORDER variable will result in the \c foo plugin
+    * and its dependent libraries occuring later on the link command-line.
+    *
+    * MACSio does not use \c dlopen() to manage plugins. Instead, MACSio uses a \em static approach
+    * to managing plugins. The set of plugins available in a \c macsio executable is determined at
+    * the time the executable is linked simply by listing all the plugin object files to be linked
+    * into the executable (along with their associated TPL(s)). MACSio exploits a feature in C++
+    * which permits initialization of static variables via non-constant expressions. All symbols in
+    * a plugin are defined with \c static scope. Every plugin defines an <tt>int registration(void)</tt>
+    * function and initializes a static dummy integer to the result of \c registration() like so...
+    *
+    * \code
+static int register_this_interface(void)
+{
+    MACSIO_IFACE_Handle_t iface;
 
-     strcpy(iface.name, iface_name);
-     strcpy(iface.ext, iface_ext);
+    strcpy(iface.name, iface_name);
+    strcpy(iface.ext, iface_ext);
 
-     if (!MACSIO_IFACE_Register(&iface))
-         MACSIO_LOG_MSG(Die, ("Failed to register interface \"%s\"", iface.name));
-   }
-   static int dummy = register_this_interface();
- * \endcode
- *
- * At the time the executable loads, the \c register_this_interface() method is called. Note that
- * this is called long before even \c main() is called. The
- * call to \c MACSIO_IFACE_Register() from within \c register_this_interface() winds up
- * adding the plugin to MACSio's global list of plugins. This happens for each plugin. The order
- * in which they are added to MACSio doesn't matter because plugins are identified by their
- * (unique) names. If MACSio encounters a case where two different plugins have the same
- * name, then it will abort and inform the user of the problem. The remedy is to
- * adjust the name of one of the two plugins. MACSio is able to call \c static methods
- * defined within the plugin via function callback pointers registered with the interface.
- *
- */
+    if (!MACSIO_IFACE_Register(&iface))
+        MACSIO_LOG_MSG(Die, ("Failed to register interface \"%s\"", iface.name));
+}
+static int dummy = register_this_interface();
+* \endcode
+*
+* At the time the executable loads, the \c register_this_interface() method is called. Note that
+* this is called long before even \c main() is called. The
+* call to \c MACSIO_IFACE_Register() from within \c register_this_interface() winds up
+* adding the plugin to MACSio's global list of plugins. This happens for each plugin. The order
+* in which they are added to MACSio doesn't matter because plugins are identified by their
+* (unique) names. If MACSio encounters a case where two different plugins have the same
+* name, then it will abort and inform the user of the problem. The remedy is to
+* adjust the name of one of the two plugins. MACSio is able to call \c static methods
+* defined within the plugin via function callback pointers registered with the interface.
+*
+*/
 
 #define MAX(A,B) (((A)>(B))?(A):(B))
 
@@ -349,17 +349,17 @@ static json_object *ProcessCommandLine(int argc, char *argv[], int *plugin_argi)
 #warning OPTION TO SET OUTPUT PRECISION TO FLOAT
 
     cl_result = MACSIO_CLARGS_ProcessCmdline((void**)&mainJargs, argFlags, 1, argc, argv,
-        "--units_prefix_system %s", "binary",
+            "--units_prefix_system %s", "binary",
             "Specify which SI units prefix system to use both in reporting performance\n"
             "data and in interpreting sizing modifiers to arguments. The options are\n"
             "\"binary\" and \"decimal\". For \"binary\" unit prefixes, sizes are reported\n"
             "in powers of 1024 and unit symbols Ki, Mi, Gi, Ti, Pi are used. For \"decimal\",\n"
             "sizes are reported in powers of 1000 and unit symbols are Kb, Mb, Gb, Tb, Pb.\n"
             "See http://en.wikipedia.org/wiki/Binary_prefix. for more information",
-        "--interface %s", "miftmpl",
+            "--interface %s", "miftmpl",
             "Specify the name of the interface to be tested. Use keyword 'list'\n"
             "to print a list of all known interface names and then exit.",
-        "--parallel_file_mode %s %d", "MIF 4",
+            "--parallel_file_mode %s %d", "MIF 4",
             "Specify the parallel file mode. There are several choices.\n"
             "Use 'MIF' for Multiple Independent File (Poor Man's) mode and then\n"
             "also specify the number of files. Or, use 'MIFFPP' for MIF mode and\n"
@@ -371,7 +371,7 @@ static json_object *ProcessCommandLine(int argc, char *argv[], int *plugin_argi)
             "the same way MIF does, but I/O within each group will be to a single,\n"
             "shared file using SIF mode.",
         "--avg_num_parts %f", "1",
-            "The average number of mesh parts per MPI rank. Non-integral values\n"
+        "The average number of mesh parts per MPI rank. Non-integral values\n"
             "are acceptable. For example, a value that is half-way between two\n"
             "integers, K and K+1, means that half the ranks have K mesh parts\n"
             "and half have K+1 mesh parts. As another example, a value of 2.75\n"
@@ -381,7 +381,7 @@ static json_object *ProcessCommandLine(int argc, char *argv[], int *plugin_argi)
             "product is non-integral, it will be rounded and a warning message will\n"
             "be generated.",
         "--part_size %d", "80000",
-            "Mesh part size in bytes. This becomes the nominal I/O request size\n"
+        "Mesh part size in bytes. This becomes the nominal I/O request size\n"
             "used by each MPI rank when marshalling data. A following B|K|M|G\n"
             "character indicates 'B'ytes, 'K'ilo-, 'M'ega- or 'G'iga- bytes\n"
             "representing powers of either 1000 or 1024 according to the selected\n"
@@ -392,46 +392,43 @@ static json_object *ProcessCommandLine(int argc, char *argv[], int *plugin_argi)
             "zone- and node-centering), this target byte count is hit exactly for\n"
             "only the most frequently dumped objects and approximately for other objects.",
         "--part_dim %d", "2",
-            "Spatial dimension of parts; 1, 2, or 3",
+        "Spatial dimension of parts; 1, 2, or 3",
         "--part_type %s", "rectilinear",
-            "Options are 'uniform', 'rectilinear', 'curvilinear', 'unstructured'\n"
+        "Options are 'uniform', 'rectilinear', 'curvilinear', 'unstructured'\n"
             "and 'arbitrary' (currently, only rectilinear is implemented)",
         "--part_map %s", MACSIO_CLARGS_NODEFAULT,
-            "Specify the name of an ascii file containing part assignments to MPI ranks.\n"
+        "Specify the name of an ascii file containing part assignments to MPI ranks.\n"
             "The ith line in the file, numbered from 0, holds the MPI rank to which the\n"
             "ith part is to be assigned. (currently ignored)",
         "--vars_per_part %d", "20",
-            "Number of mesh variable objects in each part. The smallest this can\n"
+        "Number of mesh variable objects in each part. The smallest this can\n"
             "be depends on the mesh type. For rectilinear mesh it is 1. For\n"
             "curvilinear mesh it is the number of spatial dimensions and for\n"
             "unstructured mesh it is the number of spatial dimensions plus\n"
             "2^number of topological dimensions. [50]",
-        "--vis_part_size %d", MACSIO_CLARGS_NODEFAULT,
-            "Specify the part size of vis dumps if they are required for the simulation\n",
-        "--checkpoint_vis_ratio %d", MACSIO_CLARGS_NODEFAULT,
-            "If vis dumps are being used, specify the ratio of vis dumps to checkpoint\n"
-            "dumps. For example, 2 will perform a vis dump before every other checkpoint.\n",
+        "--plot_part_size %d", MACSIO_CLARGS_NODEFAULT,
+        "Specify the part size of plot dumps if they are required for the simulation\n",
         "--topology_change_probability %f", "0.0",
-            "The probability that the topology of the mesh (e.g. something fundamental\n"
+        "The probability that the topology of the mesh (e.g. something fundamental\n"
             "about the mesh's structure) will change between dumps. A value of 1.0\n"
             "indicates it should be changed every dump. A value of 0.0, the default,\n"
             "indicates it will never change. A value of 0.1 indicates it will change\n"
             "about once every 10 dumps. Note: at present MACSio will not actually\n"
             "compute/construct a different topology. It will only inform a plugin\n"
             "that a given dump should be treated as a change in topology.",
-        "--data_mutate_sequence %s", MACSIO_CLARGS_NODEFAULT,
-            "A comma separated modifier sequence for varying the size of the dataset between\n"
-            "checkpoint dumps.\n"
+        "--data_growth_sequence %s", MACSIO_CLARGS_NODEFAULT,
+        "A comma separated modifier sequence for growing the size of the dataset between\n"
+            "dumps.\n"
             "String format: 1.5,2.0,1.1,1.8",
         "--meta_type %s", "tabular",
-            "Specify the type of metadata objects to include in each main dump.\n"
+        "Specify the type of metadata objects to include in each main dump.\n"
             "Options are 'tabular', 'amorphous'. For tabular type data, MACSio\n"
             "will generate a random set of tables of somewhat random structure\n"
             "and content. For amorphous, MACSio will generate a random hierarchy\n"
             "of random type and sized objects.",
 #warning MAY WANT SOME PORTIONS OF METADATA TO SCALE WITH MESH PIECE COUNT
         "--meta_size %d %d", "10000 50000",
-            "Specify the size of the metadata objects on each processor and\n"
+        "Specify the size of the metadata objects on each processor and\n"
             "separately, the root (or master) processor (MPI rank 0). The size\n"
             "is specified in terms of the total number of bytes in the metadata\n"
             "objects MACSio creates. For example, a type of tabular and a size of\n"
@@ -443,11 +440,15 @@ static json_object *ProcessCommandLine(int argc, char *argv[], int *plugin_argi)
             "is a 40 byte struct comprised of ints and doubles for a total of 1600\n"
             "bytes.",
         "--num_dumps %d", "10",
-            "Total number of dumps to marshal",
-	"--sleep_time %s", "0",
-	    "Time to wait between dumps",
+        "Total number of checkpoint dumps to marshal",
+        "--num_plots %d", "0",
+        "Total number of plot dumps to marshal", 
+        "--enable_trickle", "",
+        "Enable trickle dumps of a small amount of data after each timestep",
+        "--sleep_time %s", "0",
+        "Time to wait between dumps",
         "--max_dir_size %d", MACSIO_CLARGS_NODEFAULT,
-            "The maximum number of filesystem objects (e.g. files or subdirectories)\n"
+        "The maximum number of filesystem objects (e.g. files or subdirectories)\n"
             "that MACSio will create in any one subdirectory. This is typically\n"
             "relevant only in MIF mode because MIF mode can wind up generating many\n"
             "files on each dump. The default setting is unlimited meaning that MACSio\n"
@@ -467,13 +468,13 @@ static json_object *ProcessCommandLine(int argc, char *argv[], int *plugin_argi)
             "first dir, etc.",
 #ifdef HAVE_SCR
         "--exercise_scr", "",
-            "Exercise the Scalable Checkpoint and Restart (SCR)\n"
+        "Exercise the Scalable Checkpoint and Restart (SCR)\n"
             "(https://computation.llnl.gov/project/scr/library) to marshal\n"
             "files. Note that this works only in MIFFPP mode. A request to exercise\n"
             "SCR in any other mode will be ignored and en error message generated.",
 #endif
         "--debug_level %d", "0",
-            "Set debugging level (1, 2 or 3) of log files. Higher numbers mean\n"
+        "Set debugging level (1, 2 or 3) of log files. Higher numbers mean\n"
             "more frequent and detailed output. A value of zero, the default,\n"
             "turns all debugging output off. A value of 1 should not adversely\n"
             "effect performance. A value of 2 may effect performance and a value\n"
@@ -481,47 +482,47 @@ static json_object *ProcessCommandLine(int argc, char *argv[], int *plugin_argi)
             "MACSio will generate ascii json files from each processor for the main\n"
             "dump object prior to starting dumps.",
         MACSIO_CLARGS_ARG_GROUP_BEG(Log File Options),
-            "Options to control size and shape of log file",
+        "Options to control size and shape of log file",
         "--log_file_name %s", "macsio-log.log",
-            "The name of the log file.",
+        "The name of the log file.",
         "--log_line_cnt %d %d", "64 0",
-            "Set number of lines per rank in the log file and number of extra lines\n"
+        "Set number of lines per rank in the log file and number of extra lines\n"
             "for rank 0.",
         "--log_line_length %d", "128",
-            "Set log file line length.",
+        "Set log file line length.",
         "--timings_file_name %s", "macsio-timings.log",
-            "Specify the name of the timings file. Passing an empty string, \"\"\n"
+        "Specify the name of the timings file. Passing an empty string, \"\"\n"
             "will disable the creation of a timings file.",
         MACSIO_CLARGS_ARG_GROUP_END(Log File Options),
         "--alignment %d", MACSIO_CLARGS_NODEFAULT,
-            "Not currently documented",
+        "Not currently documented",
         "--filebase %s", "macsio",
-            "Basename of generated file(s).",
+        "Basename of generated file(s).",
         "--fileext %s", "dat",
-            "Extension of generated file(s).",
+        "Extension of generated file(s).",
         "--read_path %s", MACSIO_CLARGS_NODEFAULT,
-            "Specify a path name (file or dir) to start reading for a read test.",
+        "Specify a path name (file or dir) to start reading for a read test.",
         "--num_loads %d", MACSIO_CLARGS_NODEFAULT,
-            "Number of loads in succession to test.",
+        "Number of loads in succession to test.",
         "--no_validate_read", "",
-            "Don't validate data on read.",
+        "Don't validate data on read.",
         "--read_mesh %s", MACSIO_CLARGS_NODEFAULT,
-            "Specficify mesh name to read.",
+        "Specficify mesh name to read.",
         "--read_vars %s", MACSIO_CLARGS_NODEFAULT,
-            "Specify variable names to read. \"all\" means all variables. If listing more\n"
+        "Specify variable names to read. \"all\" means all variables. If listing more\n"
             "than one, be sure to either enclose space separated list in quotes or\n"
             "use a comma-separated list with no spaces",
         "--time_randomize_seeds", "",
-            "Make randomness in MACSio vary from dump to dump and run to run by\n"
+        "Make randomness in MACSio vary from dump to dump and run to run by\n"
             "time-modulating all random number seeding.",
 #if 0
         MACSIO_CLARGS_LAST_ARG_SEPERATOR(plugin_args)
 #endif
-        "--plugin_args %n", MACSIO_CLARGS_NODEFAULT,
-            "All arguments after this sentinel are passed to the I/O plugin\n"
+            "--plugin_args %n", MACSIO_CLARGS_NODEFAULT,
+        "All arguments after this sentinel are passed to the I/O plugin\n"
             "plugin. The '%n' is a special designator for the builtin 'argi'\n"
             "value.",
-    MACSIO_CLARGS_END_OF_ARGS);
+        MACSIO_CLARGS_END_OF_ARGS);
 
     plugin_args_start = json_object_path_get_int(mainJargs, "argi");
     if (plugin_args_start == 0) plugin_args_start = -1;
@@ -543,7 +544,7 @@ static json_object *ProcessCommandLine(int argc, char *argv[], int *plugin_argi)
     return mainJargs;
 }
 
-static int
+    static int
 write_timings_file(char const *filename)
 {
     char **timer_strs = 0, **rtimer_strs = 0;
@@ -639,24 +640,24 @@ int split (const char *str, char c, char ***arr)
     return count;
 }
 
-int get_modifier_array(double **modifier_array, char *modifier_string){
+int get_sequence_array(double **seq_array, char *seq_string){
 
-    if ((modifier_string != NULL) && (modifier_string[0] == '\0')){
+    if ((seq_string != NULL) && (seq_string[0] == '\0')){
         return 0;
     }
-    char **modifier_str_array = NULL;
+    char **seq_str_array = NULL;
     int c = 0;
-    c = split(modifier_string, ',', &modifier_str_array);
-    *modifier_array = (double*)malloc(sizeof(double)*c);
+    c = split(seq_string, ',', &seq_str_array);
+    *seq_array = (double*)malloc(sizeof(double)*c);
     for (int i=0; i<c;i++){
-        (*modifier_array)[i] = atof(modifier_str_array[i]);
+        (*seq_array)[i] = atof(seq_str_array[i]);
     }
     return c;
 }
-static int
+    static int
 main_write(int argi, int argc, char **argv, json_object *main_obj)
 {
-    int rank = 0, dumpNum = 0, dumpCount = 0;
+    int rank = 0;
     unsigned long long problem_nbytes, dumpBytes = 0, summedBytes = 0;
     char nbytes_str[32], seconds_str[32], bandwidth_str[32], seconds_str2[32];
     double dumpTime = 0;
@@ -667,19 +668,19 @@ main_write(int argi, int argc, char **argv, json_object *main_obj)
     int exercise_scr = JsonGetInt(main_obj, "clargs/exercise_scr");
     //int sleep_time = JsonGetInt(main_obj, "clargs/sleep_time");
 
-    json_object *vis_obj = NULL;
-    
-    int vis_part = JsonGetInt(main_obj, "clargs/vis_part_size");
-    /* If a part size has been provided for vis, copy the main_obj args 
-     * to a vis object and replace part_size with vis_part_size. 
-     * This lets us reuse the problem generation methods for creating a vis object */
-    if (vis_part > 0){
-        vis_obj = json_object_new_object();
-        json_object_object_add(json_object_path_get_object(main_obj, "clargs"), "file_type", json_object_new_string("vis"));
-        json_object *vis_problem_obj = MACSIO_DATA_GenerateTimeZeroDumpObject(main_obj,0);
-        json_object_object_add(vis_obj, "clargs", json_object_path_get_object(main_obj, "clargs"));
-        json_object_object_add(vis_obj, "parallel", json_object_path_get_object(main_obj, "parallel"));
-        json_object_object_add(vis_obj, "problem", vis_problem_obj);
+    json_object *plot_obj = NULL;
+
+    int plot_part = JsonGetInt(main_obj, "clargs/plot_part_size");
+    /* If a part size has been provided for plot file, copy the main_obj args 
+     * to a plot object and replace part_size with plot_part_size. 
+     * This lets us reuse the problem generation methods for creating a plot object */
+    if (plot_part > 0){
+        plot_obj = json_object_new_object();
+        json_object_object_add(json_object_path_get_object(main_obj, "clargs"), "file_type", json_object_new_string("plot"));
+        json_object *plot_problem_obj = MACSIO_DATA_GenerateTimeZeroDumpObject(main_obj,0);
+        json_object_object_add(plot_obj, "clargs", json_object_path_get_object(main_obj, "clargs"));
+        json_object_object_add(plot_obj, "parallel", json_object_path_get_object(main_obj, "parallel"));
+        json_object_object_add(plot_obj, "problem", plot_problem_obj);
 
         if (MACSIO_LOG_DebugLevel >= 2)
         {
@@ -690,19 +691,19 @@ main_write(int argi, int argc, char **argv, json_object *main_obj)
             if (MACSIO_LOG_DebugLevel < 3)
                 json_c_print_flags |= JSON_C_TO_STRING_NO_EXTARR_VALS;
 
-            snprintf(outfName, sizeof(outfName), "vis_obj_write_%03d.json", MACSIO_MAIN_Rank);
+            snprintf(outfName, sizeof(outfName), "plot_obj_write_%03d.json", MACSIO_MAIN_Rank);
             outf = fopen(outfName, "w");
-            fprintf(outf, "\"%s\"\n", json_object_to_json_string_ext(vis_obj, json_c_print_flags));
+            fprintf(outf, "\"%s\"\n", json_object_to_json_string_ext(plot_obj, json_c_print_flags));
             fclose(outf);
         }
 
     }
-    
+
 
     /* Sanity check args */
 
     /* Generate a static problem object to dump on each dump */
-    
+
     json_object_object_add(json_object_path_get_object(main_obj, "clargs"), "file_type", json_object_new_string("checkpoint"));
     json_object *problem_obj = MACSIO_DATA_GenerateTimeZeroDumpObject(main_obj,0);
     problem_nbytes = (unsigned long long) json_object_object_nbytes(problem_obj, JSON_C_FALSE);
@@ -710,14 +711,9 @@ main_write(int argi, int argc, char **argv, json_object *main_obj)
 #warning MAKE JSON OBJECT KEY CASE CONSISTENT
     json_object_object_add(main_obj, "problem", problem_obj);
 
-    /* Attempt to read the dataset modifier array from file */
-    double *modifier_array;
-    int modifier_sequence_length = get_modifier_array(&modifier_array,(char*)json_object_path_get_string(main_obj, "clargs/data_mutate_sequence"));
-
-    double *sleep_array;
-    int sleep_sequence_length = get_modifier_array(&sleep_array,(char*)json_object_path_get_string(main_obj, "clargs/sleep_time"));
-
-    
+    /* Attempt to read the dataset growth  array from file */
+    double *data_growth_array;
+    int growth_sequence_length = get_sequence_array(&data_growth_array,(char*)json_object_path_get_string(main_obj, "clargs/data_growth_sequence"));
 
     /* Just here for debugging for the moment */
     if (MACSIO_LOG_DebugLevel >= 2)
@@ -734,123 +730,133 @@ main_write(int argi, int argc, char **argv, json_object *main_obj)
         fprintf(outf, "\"%s\"\n", json_object_to_json_string_ext(main_obj, json_c_print_flags));
         fclose(outf);
     }
-
-    /* need to control the ratio of vis to checkpoint writes */
-    int vis_freq = json_object_path_get_int(main_obj, "clargs/checkpoint_vis_ratio") > 1 ? 
-        json_object_path_get_int(main_obj,"clargs/checkpoint_vis_ratio") : 1;
-    int total_dumps = json_object_path_get_int(main_obj, "clargs/num_dumps");
-
 #warning WERE NOT GENERATING OR WRITING ANY METADATA STUFF
 
 #warning MAKE THIS LOOP MORE LIKE A MAIN SIM LOOP WITH SIMPLE COMPUTE AND COMM STEP
     dump_loop_start = MT_Time();
     dumpTime = 0.0;
-    for (dumpNum = 0; dumpNum < json_object_path_get_int(main_obj, "clargs/num_dumps"); dumpNum++)
+
+    int timestep = 0.0;
+    int end_timestep;
+    int timestep_dt = 1;
+    double seconds_per_dt = 0.0;
+
+    int checkDumps = json_object_path_get_int(main_obj, "clargs/num_dumps");
+    int plotDumps = json_object_path_get_int(main_obj, "clargs/num_plots");
+
+    end_timestep = (checkDumps+1) * plotDumps;
+
+    int checkFrequency = (int) end_timestep/(checkDumps+1);
+    int plotFrequency = (int) end_timestep/plotDumps;
+
+    int checkpointNum = 0;
+    int plotNum = 0;
+
+    double *sleep_array;
+    int sleep_sequence_length = get_sequence_array(&sleep_array,(char*)json_object_path_get_string(main_obj, "clargs/sleep_time"));
+
+    if (sleep_sequence_length > 0){ 
+        seconds_per_dt = sleep_array[0]/checkFrequency;
+    }
+
+    const MACSIO_IFACE_Handle_t *iface = MACSIO_IFACE_GetByName(
+            json_object_path_get_string(main_obj, "clargs/interface"));
+
+    /* MAIN LOOP */
+    while (timestep < end_timestep)
     {
         double dt;
-        int do_vis = 0;
-        int scr_need_checkpoint_flag = 1;
-        MACSIO_TIMING_TimerId_t heavy_dump_tid;
-
-#warning ADD OPTION TO UNLINK OLD FILE SETS
+        int scr_need_checkpoint_flag = 0;
+        MACSIO_TIMING_TimerId_t dump_tid;
 
 #ifdef HAVE_SCR
         if (exercise_scr)
             SCR_Need_checkpoint(&scr_need_checkpoint_flag);
 #endif
 
-        const MACSIO_IFACE_Handle_t *iface = MACSIO_IFACE_GetByName(
-            json_object_path_get_string(main_obj, "clargs/interface"));
-
-
-        if ((vis_obj != NULL) && (dumpNum % vis_freq == 0)){
-            do_vis = 1;
-        }
-        /* vis dump start */
-        if (do_vis){
-            /* start timer for vis, given iteration number of 10xxx for hashing purposes*/
-            int visNum = 10000 + dumpNum;
-            MACSIO_TIMING_TimerId_t vis_dump_tid = MT_StartTimer("vis dump", main_wr_grp, visNum);
-            (*(iface->dumpFunc))(argi, argc, argv, vis_obj, visNum, dumpTime);
-#ifdef HAVE_MPI
-            mpi_errno = 0;
-#endif
-            errno = 0;
-            dt = MT_StopTimer(vis_dump_tid);    
-        }
-        
-        /* log dump start */
-        if (!exercise_scr || scr_need_checkpoint_flag)
-        {
-            int scr_valid = 0;
-
+        if ( ((checkFrequency > 0) && (timestep%checkFrequency==0) && (timestep!=0)) || scr_need_checkpoint_flag ){
 #ifdef HAVE_SCR
+            int scr_valid = 0;
             if (exercise_scr)
                 SCR_Start_checkpoint();
 #endif
-                       /* Start dump timer */
-            heavy_dump_tid = MT_StartTimer("heavy dump", main_wr_grp, dumpNum);
-
+            /* Start dump timer */
+            dump_tid = MT_StartTimer("checkpoint dump", main_wr_grp, checkpointNum);
 #warning REPLACE DUMPN AND DUMPT WITH A STATE TUPLE
 #warning SHOULD HAVE PLUGIN RETURN FILENAMES SO MACSIO CAN STAT FOR TOTAL BYTES ON DISK
             /* do the dump */
-	    (*(iface->dumpFunc))(argi, argc, argv, main_obj, dumpNum, dumpTime);
+            (*(iface->dumpFunc))(argi, argc, argv, main_obj, checkpointNum, dumpTime);
 #ifdef HAVE_MPI
             mpi_errno = 0;
 #endif
             errno = 0;
 
-
-            dt = MT_StopTimer(heavy_dump_tid);
+            dt = MT_StopTimer(dump_tid);
 
 #ifdef HAVE_SCR
             if (exercise_scr)
                 SCR_Complete_checkpoint(scr_valid);
 #endif
-        }
 
-        /* stop timer */
-        dumpTime += dt;
-        dumpBytes += problem_nbytes;
-        dumpCount += 1;
-    
-        //int dataset_mutation = 1;
-    	/* change dataset size if mutation is used */
-    	if (dumpNum < modifier_sequence_length){
-            json_object_object_add(json_object_path_get_object(main_obj, "clargs"), "file_type", json_object_new_string("checkpoint"));
-            json_object *mutated_object = MACSIO_DATA_MutateDataset(main_obj, modifier_array, dumpNum);
-            main_obj = mutated_object;
-            if (vis_obj != NULL){
-                json_object_object_add(json_object_path_get_object(main_obj, "clargs"), "file_type", json_object_new_string("vis"));
-                json_object *mutated_vis_object = MACSIO_DATA_MutateDataset(vis_obj, modifier_array, dumpNum);
-                vis_obj = mutated_vis_object;
+            /* stop timer */
+            dumpTime += dt;
+            dumpBytes += problem_nbytes;
+
+            /* log dump timing */
+            MACSIO_LOG_MSG(Info, ("Dump checkpoint%02d BW: %s/%s = %s", checkpointNum,
+                        MU_PrByts(problem_nbytes, 0, nbytes_str, sizeof(nbytes_str)),
+                        MU_PrSecs(dt, 0, seconds_str, sizeof(seconds_str)),
+                        MU_PrBW(problem_nbytes, dt, 0, bandwidth_str, sizeof(bandwidth_str))));
+
+
+            if ((growth_sequence_length>0) && (checkpointNum < growth_sequence_length)){ 
+                json_object_object_add(json_object_path_get_object(main_obj, "clargs"), "file_type", json_object_new_string("checkpoint"));
+                json_object *mutated_object = MACSIO_DATA_MutateDataset(main_obj, data_growth_array, checkpointNum);
+                main_obj = mutated_object;
             }
+
+            if ((sleep_sequence_length > 0) && (checkpointNum < sleep_sequence_length)){
+                seconds_per_dt = sleep_array[checkpointNum]/checkFrequency;
+            }
+            checkpointNum++;
+        }
+        if ( (plotFrequency > 0) && (timestep%plotFrequency==0) ){
+            /* start timer for plot, given iteration number of 10xxx for hashing purposes*/
+            dump_tid = MT_StartTimer("plot dump", main_wr_grp, plotNum);
+            (*(iface->dumpFunc))(argi, argc, argv, plot_obj, plotNum+10000, dumpTime);            
+#ifdef HAVE_MPI
+            mpi_errno = 0;
+#endif
+            errno = 0;
+            dt = MT_StopTimer(dump_tid);    
+
+            if ((growth_sequence_length>0) && (checkpointNum < growth_sequence_length)){
+                json_object_object_add(json_object_path_get_object(main_obj, "clargs"), "file_type", json_object_new_string("plot"));
+                json_object *mutated_plot_object = MACSIO_DATA_MutateDataset(plot_obj, data_growth_array, checkpointNum);
+                plot_obj = mutated_plot_object;
+            }
+            plotNum++;
+
         }
 
-        /* log dump timing */
-        MACSIO_LOG_MSG(Info, ("Dump %02d BW: %s/%s = %s", dumpNum,
-            MU_PrByts(problem_nbytes, 0, nbytes_str, sizeof(nbytes_str)),
-            MU_PrSecs(dt, 0, seconds_str, sizeof(seconds_str)),
-            MU_PrBW(problem_nbytes, dt, 0, bandwidth_str, sizeof(bandwidth_str))));
-#warning IS THIS A GOOD WAY OF SLEEPING? SHOULD THERE BE SOME COMPUTE
         /*SLEEP*/
-        if  ((dumpNum < sleep_sequence_length)){ //&& dumpNum < json_object_path_get_int(main_obj, "clargs/num_dumps")){
-            struct timespec tim, tim2;
-            tim.tv_sec = sleep_array[dumpNum];
-            tim.tv_nsec = 0;
-            nanosleep(&tim, &tim2);
-        }
+        struct timespec tim, tim2;
+        tim.tv_sec = seconds_per_dt;
+        tim.tv_nsec = 0;
+        nanosleep(&tim, &tim2);
+
+        timestep += timestep_dt;
     }
 
     dump_loop_end = MT_Time();
 
-    if (modifier_sequence_length > 0)
-        free(modifier_array);
+    if (growth_sequence_length > 0)
+        free(data_growth_array);
 
     MACSIO_LOG_MSG(Info, ("Overall BW: %s/%s = %s",
-        MU_PrByts(dumpBytes, 0, nbytes_str, sizeof(nbytes_str)),
-        MU_PrSecs(dumpTime, 0, seconds_str, sizeof(seconds_str)),
-        MU_PrBW(dumpBytes, dumpTime, 0, bandwidth_str, sizeof(bandwidth_str))));
+                MU_PrByts(dumpBytes, 0, nbytes_str, sizeof(nbytes_str)),
+                MU_PrSecs(dumpTime, 0, seconds_str, sizeof(seconds_str)),
+                MU_PrBW(dumpBytes, dumpTime, 0, bandwidth_str, sizeof(bandwidth_str))));
 
     bandwidth = dumpBytes / dumpTime;
     summedBandwidth = bandwidth;
@@ -868,16 +874,16 @@ main_write(int argi, int argc, char **argv, json_object *main_obj)
     if (rank == 0)
     {
         MACSIO_LOG_MSG(Info, ("Summed  BW: %s",
-            MU_PrBW(summedBandwidth, 1.0, 0, bandwidth_str, sizeof(bandwidth_str))));
+                    MU_PrBW(summedBandwidth, 1.0, 0, bandwidth_str, sizeof(bandwidth_str))));
         MACSIO_LOG_MSG(Info, ("Total Bytes: %s; Last finisher - First starter = %s; BW = %s",
-            MU_PrByts(summedBytes, 0, nbytes_str, sizeof(nbytes_str)),
-            MU_PrSecs(max_dump_loop_end - min_dump_loop_start, 0, seconds_str, sizeof(seconds_str)),
-            MU_PrBW(summedBytes, max_dump_loop_end - min_dump_loop_start, 0, bandwidth_str, sizeof(bandwidth_str))));
+                    MU_PrByts(summedBytes, 0, nbytes_str, sizeof(nbytes_str)),
+                    MU_PrSecs(max_dump_loop_end - min_dump_loop_start, 0, seconds_str, sizeof(seconds_str)),
+                    MU_PrBW(summedBytes, max_dump_loop_end - min_dump_loop_start, 0, bandwidth_str, sizeof(bandwidth_str))));
     }
 }
 
 #warning DO WE REALLY CALL IT THE MAIN_OBJ HERE
-static int
+    static int
 main_read(int argi, int argc, char **argv, json_object *main_obj)
 {
     int loadNum;
@@ -889,7 +895,7 @@ main_read(int argi, int argc, char **argv, json_object *main_obj)
         MACSIO_TIMING_TimerId_t heavy_load_tid;
 
         const MACSIO_IFACE_Handle_t *iface = MACSIO_IFACE_GetByName(
-            json_object_path_get_string(main_obj, "clargs/interface"));
+                json_object_path_get_string(main_obj, "clargs/interface"));
 
         /* log load start */
 
@@ -898,7 +904,7 @@ main_read(int argi, int argc, char **argv, json_object *main_obj)
 
         /* do the load */
         (*(iface->loadFunc))(argi, argc, argv,
-            JsonGetStr(main_obj, "clargs/read_path"), main_obj, &data_read_obj);
+                JsonGetStr(main_obj, "clargs/read_path"), main_obj, &data_read_obj);
 
         /* stop timer */
         MT_StopTimer(heavy_load_tid);
@@ -922,7 +928,7 @@ main_read(int argi, int argc, char **argv, json_object *main_obj)
     }
 }
 
-int
+    int
 main(int argc, char *argv[])
 {
     json_object *main_obj = json_object_new_object();
@@ -964,13 +970,13 @@ main(int argc, char *argv[])
     json_object_object_add(main_obj, "clargs", clargs_obj);
 
     strncpy(MACSIO_UTILS_UnitsPrefixSystem, JsonGetStr(clargs_obj, "units_prefix_system"),
-        sizeof(MACSIO_UTILS_UnitsPrefixSystem));
+            sizeof(MACSIO_UTILS_UnitsPrefixSystem));
 
     MACSIO_LOG_MainLog = MACSIO_LOG_LogInit(MACSIO_MAIN_Comm,
-        JsonGetStr(clargs_obj, "log_file_name"),
-        JsonGetInt(clargs_obj, "log_line_length"),
-        JsonGetInt(clargs_obj, "log_line_cnt/0"),
-        JsonGetInt(clargs_obj, "log_line_cnt/1"));
+            JsonGetStr(clargs_obj, "log_file_name"),
+            JsonGetInt(clargs_obj, "log_line_length"),
+            JsonGetInt(clargs_obj, "log_line_cnt/0"),
+            JsonGetInt(clargs_obj, "log_line_cnt/1"));
 
 #warning THESE INITIALIZATIONS SHOULD BE IN MACSIO_LOG
     MACSIO_LOG_DebugLevel = JsonGetInt(clargs_obj, "debug_level");
