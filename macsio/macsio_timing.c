@@ -515,7 +515,7 @@ MACSIO_TIMING_ReduceTimers(
 
     MPI_Comm_rank(comm, &rank);
 
-    if (root == -1)
+    if (root == -1 && !first)
     {
         MPI_Op_free(&timerinfo_reduce_op);
         MPI_Type_free(&str_32_mpi_type);
