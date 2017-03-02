@@ -1091,14 +1091,16 @@ static void main_dump_sif(
 #ifdef HAVE_MPI
 	char const *mesh_type = json_object_path_get_string(main_obj, "clargs/part_type");
 	char fileName[256];
-	TIO_File_t tiofile_id;
+	TIO_File_t tiofile_id = NULL;
+    	static TIO_File_t plotfile_id; /* This is static to make sure we maintain reference to the open plot file between iterations */
 	TIO_Object_t state_id, variable_id;
 	char state_name[16];
     char *date = (char*)getDate();
 	MPI_Info mpiInfo = MPI_INFO_NULL;
+    int plot = dumpn < 10000 ? 0 : 1;
 
     int file_suffix;
-    if (dumpn < 10000){
+    if (!plot){
         file_suffix = dumpn;
         sprintf(state_name, "state0");
     } else {
@@ -1114,21 +1116,19 @@ static void main_dump_sif(
     /* If checkpoint - create file.....
      * If vis - open vis file and append....
      */
-    if (dumpn < 10000){
+    if (!plot){
         TIO_Call( TIO_Create(fileName, &tiofile_id, TIO_ACC_REPLACE, "MACSio",
-                    "0.9", date, fileName, MACSIO_MAIN_Comm, MPI_INFO_NULL, MACSIO_MAIN_Rank),
-                "File Creation Failed\n");
-        TIO_Call( TIO_Create_State(tiofile_id, state_name, &state_id, 1, (TIO_Time_t)0.0, "us"),
-                "State Create Failed\n");
+				"0.9", date, fileName, MACSIO_MAIN_Comm, MPI_INFO_NULL, MACSIO_MAIN_Rank),
+			"File Creation Failed\n");
+	TIO_Call( TIO_Create_State(tiofile_id, state_name, &state_id, 1, (TIO_Time_t)0.0, "us"),
+			"State Create Failed\n");
     } else {
-        if (dumpn == 10000){
-            TIO_Call( TIO_Create(fileName, &tiofile_id, TIO_ACC_REPLACE, "MACSIO",
-                        "0.9", date, fileName, MACSIO_MAIN_Comm, MPI_INFO_NULL, MACSIO_MAIN_Rank),
-                    "Plot File Creation Failed\n");
-        } else {
-            TIO_Call( TIO_Open(fileName, &tiofile_id, TIO_ACC_READWRITE, "MACSio",
-                        "0.9", date, fileName, MACSIO_MAIN_Comm, MPI_INFO_NULL, MACSIO_MAIN_Rank),
-                    "File Open Failed\n");
+	    if (dumpn == 10000){ /* First plot dump so create new file */
+		    TIO_Call( TIO_Create(fileName, &tiofile_id, TIO_ACC_REPLACE, "MACSIO",
+					    "0.9", date, fileName, MACSIO_MAIN_Comm, MPI_INFO_NULL, MACSIO_MAIN_Rank),
+				    "Plot File Creation Failed\n");
+        } else { /* Plot file already exists (and is already open?) so no need to create/open file and instead we use the static plotfile_id */
+            tiofile_id = plotfile_id;
         }
         sprintf(state_name, "state%d", (dumpn-10000));
         TIO_Call( TIO_Create_State(tiofile_id, state_name, &state_id, (dumpn-10000), (TIO_Time_t)0.0, "us"),
@@ -1150,8 +1150,20 @@ static void main_dump_sif(
 	TIO_Call( TIO_Close_State(tiofile_id, state_id),
 			"State Close Failed\n");
 
-	TIO_Call( TIO_Close(tiofile_id),
-	          "Close File failed\n");
+    if (!plot) {
+	    /* Close the checkpoint file */
+        TIO_Call( TIO_Close(tiofile_id),
+	              "Close File failed\n");
+    } else if (dumpn-10000 >= json_object_path_get_int(main_obj, "clargs/num_plots")-1) {
+        /* At last dump so we want to close the file */
+        TIO_Call( TIO_Close(tiofile_id),
+                "Close Plot File failed\n");
+    } else { 
+        /* Plot has been written but not reached the end yet so do a flush */
+        TIO_Call( TIO_Flush(tiofile_id),
+                "Flush Plot File failed\n");
+	plotfile_id = tiofile_id;
+    }
 
 
 #endif
