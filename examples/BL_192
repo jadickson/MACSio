@@ -1,0 +1,1 @@
+<run> -n 192 ../macsio --interface typhonio --parallel_file_mode SIF 1 --part_size 50619 --part_dim 2 --part_type unstructured --vars_per_part 9 --num_dumps 2 --sleep_time 38 --log_file_name "" --timings_file_name "" --plugin_args --no_collective
