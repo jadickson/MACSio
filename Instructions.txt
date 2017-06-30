@@ -1,0 +1,11 @@
+MACSio I/O Proxy Application
+
+MACSio is being used to generate datasets and generate patterns of I/O at a high level. 
+
+The most developed experiemnetal parts of MACSio can be found in the typhonio_plugin branch, which incudes modifications to the base MACSio operation and a plugin to exercise the typhonio library (https://github.com/UK-MAC/typhonio). 
+
+Installation instructions are included in the root MACSio directory. The installation requires a site configuation file to be written for the target machine that provides the locations of required libraries and compilers for the build. 
+
+Example problem inputs can be found in MACSio/examples, and can be run by doing:
+
+<mpirun/srun> -n 80 ./macsio --interface typhonio <rest of parameters taken from example file...>
