@@ -740,10 +740,13 @@ main_write(int argi, int argc, char **argv, json_object *main_obj)
     int checkDumps = json_object_path_get_int(main_obj, "clargs/num_dumps");
     int plotDumps = json_object_path_get_int(main_obj, "clargs/num_plots");
 
-    end_timestep = (checkDumps+1) * plotDumps;
-
+    if (plotDumps == 0) {
+    	end_timestep = checkDumps+1;
+    } else {
+	    end_timestep = (checkDumps+1) * plotDumps;
+	}
     int checkFrequency = (int) end_timestep/(checkDumps+1);
-    int plotFrequency = (int) end_timestep/plotDumps;
+    int plotFrequency = plotDumps > 0 ? (int) end_timestep/plotDumps : 0;
 
     int checkpointNum = 0;
     int plotNum = 0;
