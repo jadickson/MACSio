@@ -20,6 +20,10 @@
         EXODUS_HOME=/foo/bar/exodus-6.09/exodus/myinstall
         NETCDF_HOME=/foo/bar/netcdf/4.1.1/i386-apple-darwin12_mpicc
 
+	# For the Typhonio plugin, we need to have a build of Typhonio (https://github.com/UK-MAC/typhonio)
+	# which in turn must be built on top of HDF5
+	TYPHONIO_HOME=/foo/bar/typhonio
+
 3. Continue populating the file you created in step one with
    variables to control the location of C/C++ compilers, compiler
    flags, linker flags, etc. Note that a C++ compiler is used
