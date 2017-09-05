@@ -34,7 +34,7 @@ TYPHONIO_URL = https://github.com/UK-MAC/typhonio
 
 ifneq ($(TYPHONIO_HOME),)
 
-TYPHONIO_LDFLAGS = -L$(TYPHONIO_HOME)/lib -ltyphonio
+TYPHONIO_LDFLAGS = -L$(TYPHONIO_HOME)/lib -ltyphonio -Wl,-rpath,$(TYPHONIO_HOME)/lib
 TYPHONIO_CFLAGS = -I$(TYPHONIO_HOME)/include
 
 TYPHONIO_SOURCES = macsio_typhonio.c
