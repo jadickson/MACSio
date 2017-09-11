@@ -310,14 +310,14 @@ static void write_ucdzoo_mesh_part(
 	int dimsz[3] = {1,1,1};
 
 	switch(ndims){
-		case 2:
-			coordobj = JsonGetObj(part_obj, "Mesh/Coords/ZCoords");
+		case 3:
+		coordobj = JsonGetObj(part_obj, "Mesh/Coords/ZCoords");
 	        coords[2] = json_object_extarr_data(coordobj);
 	        dims[2] = JsonGetInt(part_obj, "Mesh/LogDims", 2);
 	        dimsz[2] = dims[2]-1;
 	        nnodes *= dims[2];
 	        nzones *= dimsz[2];
-		case 1:
+		case 2:
 	        coordobj = JsonGetObj(part_obj, "Mesh/Coords/YCoords");
 	        coords[1] = json_object_extarr_data(coordobj);
 	        dims[1] = JsonGetInt(part_obj, "Mesh/LogDims", 1);
@@ -720,20 +720,20 @@ static void write_quad_mesh_whole(
 						MPI_Comm comm;
 						MPI_Comm_split(MACSIO_MAIN_Comm, color, MACSIO_MAIN_Rank, &comm);
 						if (color == 1){
-						MPI_Gather(x_coord, local_mesh_dims[0], MPI_DOUBLE, x_coord_root, local_mesh_dims[0], MPI_DOUBLE, 0, comm);
+						MPI_Gather((void*)x_coord, local_mesh_dims[0], MPI_DOUBLE, x_coord_root, local_mesh_dims[0], MPI_DOUBLE, 0, comm);
 						}
 						if (ndims > 1){
 							color = (JsonGetInt(bounds, "", 0)==0 && JsonGetInt(bounds,"",2)==0) ? 1: MPI_UNDEFINED;
 							MPI_Comm_split(MACSIO_MAIN_Comm, color, MACSIO_MAIN_Rank, &comm);
 							if (color == 1){
-							MPI_Gather(y_coord, local_mesh_dims[1], MPI_DOUBLE, y_coord_root, local_mesh_dims[1], MPI_DOUBLE, 0, comm);
+							MPI_Gather((void*)y_coord, local_mesh_dims[1], MPI_DOUBLE, y_coord_root, local_mesh_dims[1], MPI_DOUBLE, 0, comm);
 							}					
 						}
 						if (ndims > 2){
 							color = (JsonGetInt(bounds, "", 0)==0 && JsonGetInt(bounds,"",1)==0) ? 1: MPI_UNDEFINED;
 							MPI_Comm_split(MACSIO_MAIN_Comm, color, MACSIO_MAIN_Rank, &comm);
 							if (color == 1)
-							MPI_Gather(z_coord, local_mesh_dims[2], MPI_DOUBLE, z_coord_root, local_mesh_dims[2], MPI_DOUBLE, 0, comm);
+							MPI_Gather((void*)z_coord, local_mesh_dims[2], MPI_DOUBLE, z_coord_root, local_mesh_dims[2], MPI_DOUBLE, 0, comm);
 
 						}
 					} else {
